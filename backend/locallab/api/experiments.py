@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from locallab.db import get_session
 from locallab.experiments.registry import list_experiments
-from locallab.models import Experiment
+from locallab.models import Experiment, Job, JobStatus
 from locallab.schemas.experiments import ExperimentCreate, ExperimentDetail, ExperimentOut, ExperimentTypeOut, ValidationReport
 from locallab.services import experiments as experiment_service
+from locallab.services import jobs as job_service
 
 router = APIRouter(tags=["experiments"])
 
@@ -63,4 +64,24 @@ def get_experiment(experiment_id: int, session: Session = Depends(get_session)):
     exp = session.get(Experiment, experiment_id)
     if exp is None:
         raise HTTPException(404, "Experiment not found")
+    return _detail(exp)
+
+
+@router.post("/experiments/{experiment_id}/resume", response_model=ExperimentDetail, status_code=201)
+def resume_experiment(experiment_id: int, session: Session = Depends(get_session)):
+    """Queue a new job on the same experiment; it re-runs only what did not complete (resumable types only)."""
+    exp = session.get(Experiment, experiment_id)
+    if exp is None:
+        raise HTTPException(404, "Experiment not found")
+    from locallab.experiments.registry import get_experiment as _get_type
+
+    if not _get_type(exp.type).resumable:
+        raise HTTPException(409, f"experiment type {exp.type!r} cannot be resumed")
+    last = exp.jobs[-1]
+    if not JobStatus(last.status).terminal:
+        raise HTTPException(409, f"job {last.id} is still {last.status}")
+    job = Job(seed=last.seed)
+    exp.jobs.append(job)
+    session.flush()
+    job_service.add_log(session, job.id, "INFO", f"queued (resume of job {last.id})")
     return _detail(exp)

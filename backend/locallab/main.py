@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from locallab import __version__
-from locallab.api import experiments, jobs, managed, models, runtimes, system
+from locallab.api import experiments, jobs, managed, models, optimization, runtimes, system
 from locallab.config import get_settings
 from locallab.db import init_db
 from locallab.logging import configure_logging
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router, prefix="/api")
     app.include_router(runtimes.router, prefix="/api")
     app.include_router(managed.router, prefix="/api")
+    app.include_router(optimization.router, prefix="/api")
     return app
 
 

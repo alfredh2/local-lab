@@ -46,6 +46,7 @@ class Experiment(ABC):
     description: ClassVar[str]
     config_model: ClassVar[type[BaseModel]]
     presets: ClassVar[dict[str, dict[str, Any]]] = {}
+    resumable: ClassVar[bool] = False  # a new job on the same experiment continues where the last one stopped
 
     def preflight(self, config: BaseModel) -> PreflightResult:
         """Check feasibility against live resources. Raise ValueError if the run cannot work."""

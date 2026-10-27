@@ -257,8 +257,8 @@ class ConcurrencySweep(Experiment):
         failed_in_row = 0
         for idx, c in enumerate(cfg.concurrency_levels):
             lcfg = cfg.level_config(idx, c, url, served)
-            progress.context = {"sweep": {"levels": cfg.concurrency_levels, "level_index": idx, "concurrency": c,
-                                          "levels_done": len([lv for lv in levels])}}
+            progress.context = {**progress.context, "sweep": {"levels": cfg.concurrency_levels, "level_index": idx, "concurrency": c,
+                                                              "levels_done": len([lv for lv in levels])}}
             ctx.log("INFO", f"Sweep level {idx + 1}/{len(cfg.concurrency_levels)}: concurrency {c}, "
                             f"{lcfg.num_requests} requests x {lcfg.iterations} iterations")
             recs: list[Record] = []

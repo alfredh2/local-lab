@@ -101,43 +101,6 @@ def test_few_samples_are_called_out():
 
 # ---------------- integration: managed lifecycle through the real worker ----------------
 @pytest.fixture
-def gpu(monkeypatch):
-    state = GpuPreflight(gpu_index=0, name="Fake 5090", total_mb=32768, free_mb=20000, compute_capability=(12, 0))
-
-    def fake(index, util, allow, exclude_pids=None):
-        errors, warnings = list(state.errors), list(state.warnings)
-        if state.contended:
-            msg = "GPU 0 is in use by other work"
-            (warnings if allow else errors).append(msg + (" (override)" if allow else ". Refusing to benchmark on a contended GPU."))
-        return GpuPreflight(**{**state.__dict__, "requested_mb": util * state.total_mb, "override": allow,
-                               "errors": errors, "warnings": warnings})
-
-    monkeypatch.setattr(vm, "check_gpu", fake)
-    return state
-
-
-@pytest.fixture
-def gpu_procs(monkeypatch):
-    """Controls which compute processes the benchmark 'sees' on the GPU (the real GPU may be busy)."""
-    import locallab.experiments.inference.experiment as exp_mod
-    import locallab.experiments.inference.sweep as sweep_mod
-    from locallab.schemas.system import GpuProcess
-
-    procs: list[GpuProcess] = []
-    real = read_gpus
-
-    def fake_read():
-        snap = real()
-        for g in snap.gpus:
-            g.processes = list(procs)
-        return snap
-
-    monkeypatch.setattr(exp_mod, "read_gpus", fake_read)
-    monkeypatch.setattr(sweep_mod, "read_gpus", fake_read)
-    return procs
-
-
-@pytest.fixture
 def env(settings, session, fake_docker, gpu, gpu_procs):
     make_repo(Path(settings.hf_cache_dir), "Qwen/Mini-Instruct", CFG)
     sync_registry(session, settings)

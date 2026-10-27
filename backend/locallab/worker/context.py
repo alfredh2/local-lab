@@ -6,14 +6,11 @@ from typing import Any
 
 from locallab.config import Settings
 from locallab.db import session_scope
+from locallab.errors import WorkerShutdown  # noqa: F401  (re-exported for the runner)
 from locallab.experiments.base import Cancelled
 from locallab.models import Artifact, Job, utcnow
 from locallab.services import jobs as job_service
 from locallab.services.worker_heartbeat import write_heartbeat
-
-
-class WorkerShutdown(Exception):
-    """The worker process is stopping; the job cannot be completed."""
 
 
 class JobContext:

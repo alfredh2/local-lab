@@ -2,7 +2,7 @@ import enum
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from locallab.db import Base
@@ -146,3 +146,27 @@ class RuntimeConfig(Base):
     registry_model_id: Mapped[int | None] = mapped_column(ForeignKey("models.id"))
     config: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ConfigResult(Base):
+    """One evaluated server configuration of an optimization matrix. Rows are persisted independently so a
+    crash, cancellation or failure elsewhere in the matrix never loses or invalidates them."""
+
+    __tablename__ = "config_results"
+    __table_args__ = (UniqueConstraint("experiment_id", "key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(ForeignKey("experiments.id"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"))  # the job that produced the current state
+    key: Mapped[str] = mapped_column(String(32))  # hash of (model revision, context, quantization, kv dtype)
+    label: Mapped[str] = mapped_column(String(255))
+    config: Mapped[dict[str, Any]] = mapped_column(JSON)  # the exact server configuration
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    # pending | running | completed | failed | skipped | cancelled
+    failure_kind: Mapped[str | None] = mapped_column(String(48))
+    error: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    managed_server_id: Mapped[int | None] = mapped_column(ForeignKey("managed_servers.id"))
+    results: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # performance + quality for this exact configuration
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)

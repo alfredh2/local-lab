@@ -312,7 +312,9 @@ def reconcile_orphans(docker: OwnedDocker, settings: Settings) -> list[str]:
     for c in docker.list_owned():
         with session_scope() as s:
             row = s.scalars(select(ManagedServer).where(ManagedServer.container_name == c.name)).first()
-            job = s.get(Job, row.job_id) if row and row.job_id else None
+            labelled = c.labels.get("locallab.job_id", "")
+            job_id = row.job_id if row and row.job_id else (int(labelled) if labelled.isdigit() else None)
+            job = s.get(Job, job_id) if job_id else None  # sandboxes have no server row; their label names the job
             active = job is not None and job.status in (JobStatus.preparing.value, JobStatus.running.value)
             fresh = active and job.heartbeat_at is not None and job.heartbeat_at >= stale_cutoff
             if fresh:

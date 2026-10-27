@@ -1,9 +1,10 @@
 from locallab.experiments.base import Experiment
 from locallab.experiments.diagnostic import DiagnosticExperiment
 from locallab.experiments.inference.experiment import InferenceBenchmark
+from locallab.experiments.inference.optimization import OptimizationMatrix
 from locallab.experiments.inference.sweep import ConcurrencySweep
 
-_TYPES: dict[str, Experiment] = {e.type_name: e for e in (DiagnosticExperiment(), InferenceBenchmark(), ConcurrencySweep())}
+_TYPES: dict[str, Experiment] = {e.type_name: e for e in (DiagnosticExperiment(), InferenceBenchmark(), ConcurrencySweep(), OptimizationMatrix())}
 
 
 def get_experiment(type_name: str) -> Experiment:

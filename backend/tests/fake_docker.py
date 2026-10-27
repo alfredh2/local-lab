@@ -38,6 +38,9 @@ class FakeDocker:
         self.image_present = True
         self.oneoff_calls = 0
         self.sandbox_error: str | None = None
+        self.kw_fn = None  # spec -> extra MockServer kwargs for that container
+        self.mode_fn = None  # spec -> start mode override (ok | never_ready | exit_at_start)
+        self.fail_fn = None  # spec -> DockerError message or None
         self._lock = threading.Lock()
 
     # --- helpers for tests ---
@@ -58,15 +61,20 @@ class FakeDocker:
         self.calls.append(("run", spec.name))
         if self.fail_run:
             raise DockerError(self.fail_run)
+        if self.fail_fn and (msg := self.fail_fn(spec)):
+            raise DockerError(msg)
+        mode = (self.mode_fn(spec) if self.mode_fn else None) or self.start_mode
         cid = f"fake{next(_ids):04d}"
         c = FakeContainer(id=cid, name=spec.name, labels=dict(spec.labels), spec=spec, logs="INFO vLLM starting\n")
-        if self.start_mode == "exit_at_start":
+        served = spec.command[spec.command.index("--served-model-name") + 1] if "--served-model-name" in spec.command else None
+        if mode == "exit_at_start":
             c.status, c.exit_code, c.logs = "exited", 1, self.exit_logs
-        elif self.start_mode == "ok":
+        elif mode == "ok":
             def boot() -> None:
                 time.sleep(self.ready_delay_s)
                 if c.status == "running":
-                    srv = MockServer(port=spec.host_port, **self.server_kw)
+                    kw = {**self.server_kw, **({"model": served} if served else {}), **(self.kw_fn(spec) if self.kw_fn else {})}
+                    srv = MockServer(port=spec.host_port, **kw)
                     srv.__enter__()
                     c.server = srv
                     c.logs += "INFO Application startup complete.\n"

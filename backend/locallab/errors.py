@@ -5,3 +5,7 @@ class ExpectedFailure(Exception):
 
 class ServerCrashed(ExpectedFailure):
     """The inference server died or vanished while a benchmark was running."""
+
+
+class WorkerShutdown(Exception):
+    """The worker process is stopping; the job cannot be completed."""
