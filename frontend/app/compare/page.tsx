@@ -79,9 +79,10 @@ function CompareInner() {
         </table>
         <p className="mt-2 text-xs text-zinc-500">Percentages are relative to the first run. Green marks the best value per row. Latencies are over successful requests only.</p>
       </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         {barCard("Throughput (tok/s)", [METRICS[0], METRICS[1]])}
-        {barCard("Latency (ms)", [METRICS[4], METRICS[5], METRICS[8], METRICS[9]])}
+        {barCard("Time to first token (ms)", [METRICS[4], METRICS[5]])}
+        {barCard("End-to-end latency (ms)", [METRICS[8], METRICS[9]])}
       </div>
       <Card title={differing.length ? "What differs between runs" : "Runs share the same configuration"}>
         <table className="w-full text-sm"><thead className="text-left text-xs text-zinc-500"><tr><th className="py-1 font-medium">Setting</th>{runs.map((x) => <th key={x.e.id} className="py-1 font-medium">{label(x)}</th>)}</tr></thead>

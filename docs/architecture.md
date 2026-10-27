@@ -36,3 +36,11 @@ No endpoint accepts commands. The only subprocess is a fixed `git rev-parse HEAD
 - Frontend polls (2 s) instead of WebSockets: simpler and sufficient.
 - Timestamps are stored as naive UTC; the frontend normalizes them.
 - GPU history for charts is an in-memory ring buffer in the API process (resets on restart); durable measurements live in experiment artifacts.
+
+## Phase 2: inference benchmarking
+- **Runtime adapters** (`runtimes/`): `RuntimeAdapter` (`probe`, `generate`, `aclose`). `VllmOpenAIAdapter` streams `/v1/completions`; failures are returned as classified outcomes (`timeout`, `connection`, `connection_lost`, `oom`, `bad_request`, `server_error`, `incomplete_stream`), cancellation propagates. A managed adapter can later add launch/shutdown without touching experiments.
+- **Experiment** (`experiments/inference/`): `config` (validated, host-allowlisted) -> `preflight` (reachability, model, `max_model_len`, KV capacity) -> `runner` (closed-loop scheduler) -> `metrics` (definitions, percentiles) -> `experiment` (warmup, iterations, GPU sampler, artifacts). Preflight runs at API creation and again at job start.
+- **Workload**: token-ID prompts with per-request seeds give an exact input length (verified against server `usage`) and defeat prefix caching; output length is forced with `ignore_eos`/`min_tokens`. Text mode is approximate and labelled so.
+- **Measurement**: TTFT = send -> first streamed chunk carrying a token; TPOT = (E2E - TTFT)/(n-1); aggregate throughput = successful output tokens / measured wall time. Token counts come from the server's usage object and are flagged `estimated` otherwise. GPU memory is a 250 ms device-wide NVML sampler over the measured phase.
+- **Honest failure**: all-failed, warmup-failed and consecutive-failure runs end `failed` (no results row); the `requests.json` artifact is still written and marked `complete: false`. Partial failures complete with `success_rate < 1` and a warning.
+- **Progress**: `jobs.progress` (JSON) updated about once a second; the worker also refreshes its heartbeat during long jobs.

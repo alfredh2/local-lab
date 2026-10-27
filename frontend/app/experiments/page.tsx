@@ -11,7 +11,7 @@ import { btn, btnGhost, Card, Empty, ErrorBox, StatusBadge } from "@/components/
 function NewExperiment({ types }: { types: ExperimentType[] }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const [type, setType] = useState(types[0]?.type);
+  const [type, setType] = useState((types.find((x) => x.type === "inference_benchmark") ?? types[0])?.type);
   const [values, setValues] = useState<Record<string, any>>({});
   const t = types.find((x) => x.type === type);
   const props: Record<string, any> = t?.config_schema.properties ?? {};
@@ -66,7 +66,7 @@ export default function ExperimentsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold">Experiments</h1>
-      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
         <div>{types.isError ? <ErrorBox error={types.error} /> : types.data && <NewExperiment types={types.data} />}</div>
         <div>
           {exps.isError ? <ErrorBox error={exps.error} /> : exps.data?.length === 0 ? (
@@ -78,21 +78,21 @@ export default function ExperimentsPage() {
                 {picked.length >= 2 ? <Link className={btn} href={`/compare?ids=${picked.join(",")}`}>Compare {picked.length}</Link>
                   : <span className={btnGhost + " cursor-not-allowed opacity-50"}>Compare</span>}
               </div>
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="text-left text-xs text-zinc-500"><tr className="border-b border-zinc-800">
-                  {["", "Name", "Type", "Status", "Result", "Duration", "Created"].map((h) => <th key={h} className="px-4 py-2 font-medium">{h}</th>)}</tr></thead>
+                  {["", "Name", "Status", "Result", "Duration", "Created"].map((h) => <th key={h} className="px-4 py-2 font-medium">{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-zinc-800">
                   {exps.data?.map((e) => (
                     <tr key={e.id} className="hover:bg-zinc-900">
                       <td className="pl-4">{e.type === "inference_benchmark" && e.latest_job?.status === "completed" &&
                         <input type="checkbox" aria-label={`Select ${e.name}`} checked={picked.includes(e.id)} onChange={() => toggle(e.id)} />}</td>
-                      <td className="px-4 py-2"><Link href={`/experiments/${e.id}`} className="font-medium hover:underline">{e.name}</Link></td>
-                      <td className="px-4 py-2 text-zinc-400">{e.type}</td>
+                      <td className="min-w-[200px] px-4 py-2"><Link href={`/experiments/${e.id}`} className="font-medium hover:underline">{e.name}</Link>
+                        <div className="text-xs text-zinc-500">{e.type.replace("_", " ")}</div></td>
                       <td className="px-4 py-2">{e.latest_job && <StatusBadge status={e.latest_job.status} />}</td>
-                      <td className="px-4 py-2 text-xs text-zinc-400">{e.type === "inference_benchmark" && e.latest_job?.results ?
-                        `${e.config.model} · ${Number(e.latest_job.results.summary.throughput.aggregate_output_tok_s).toFixed(0)} tok/s` : ""}</td>
-                      <td className="px-4 py-2 tabular-nums">{fmtDuration(e.latest_job?.started_at, e.latest_job?.finished_at)}</td>
-                      <td className="px-4 py-2 text-xs text-zinc-500">{fmtTime(e.created_at)}</td>
+                      <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-400">{e.type === "inference_benchmark" && e.latest_job?.results ?
+                        `${Number(e.latest_job.results.summary.throughput.aggregate_output_tok_s).toFixed(0)} tok/s · ${String(e.config.model)}` : ""}</td>
+                      <td className="whitespace-nowrap px-4 py-2 tabular-nums">{fmtDuration(e.latest_job?.started_at, e.latest_job?.finished_at)}</td>
+                      <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-500">{fmtTime(e.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -95,7 +95,7 @@ export default function BenchmarkResults({ job, artifacts }: { job: Job; artifac
 
       {measured.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Latency per request (ms), in completion order of issue">
+          <Card title="Latency per request (ms), in issue order">
             <LineChartCard data={perReq} xKey="n" xLabel={(x) => `req ${x}`}
               series={[{ key: "e2e", label: "End-to-end (left)", color: "#60a5fa" }, { key: "ttft", label: "TTFT (right)", color: "#fbbf24", axis: "right" }]} />
           </Card>
