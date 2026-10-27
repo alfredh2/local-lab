@@ -16,6 +16,7 @@ class ExperimentTypeOut(BaseModel):
     title: str
     description: str
     config_schema: dict[str, Any]
+    presets: dict[str, dict[str, Any]] = {}
 
 
 class JobOut(BaseModel):
@@ -29,6 +30,7 @@ class JobOut(BaseModel):
     error: str | None
     seed: int | None
     results: dict[str, Any] | None
+    progress: dict[str, Any] | None
     queued_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
@@ -70,3 +72,10 @@ class ArtifactOut(BaseModel):
     size_bytes: int
     sha256: str
     created_at: datetime
+
+
+class ValidationReport(BaseModel):
+    ok: bool
+    errors: list[str]
+    warnings: list[str]
+    info: dict[str, Any] | None = None

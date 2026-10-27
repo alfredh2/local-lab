@@ -70,6 +70,7 @@ class Job(Base):
     error: Mapped[str | None] = mapped_column(Text)
     seed: Mapped[int | None] = mapped_column(Integer)
     results: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    progress: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     queued_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)

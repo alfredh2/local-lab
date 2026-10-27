@@ -5,6 +5,7 @@ that returns a results dict. The worker owns lifecycle/status; `run` never
 sets a terminal status itself.
 """
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any, ClassVar, Protocol
 
 from pydantic import BaseModel
@@ -12,6 +13,12 @@ from pydantic import BaseModel
 
 class Cancelled(Exception):
     """Raised by the context when the job should stop (user cancel)."""
+
+
+@dataclass
+class PreflightResult:
+    warnings: list[str] = field(default_factory=list)
+    info: dict[str, Any] | None = None
 
 
 class ExperimentContext(Protocol):
@@ -26,6 +33,9 @@ class ExperimentContext(Protocol):
     def check_cancel(self) -> None:
         """Raise Cancelled if cancellation was requested."""
 
+    def set_progress(self, progress: dict[str, Any]) -> None:
+        """Publish live progress for the UI (throttled by the context)."""
+
     def write_artifact(self, name: str, kind: str, data: Any) -> None:
         """Persist JSON-serialisable `data` as a job artifact."""
 
@@ -35,6 +45,11 @@ class Experiment(ABC):
     title: ClassVar[str]
     description: ClassVar[str]
     config_model: ClassVar[type[BaseModel]]
+    presets: ClassVar[dict[str, dict[str, Any]]] = {}
+
+    def preflight(self, config: BaseModel) -> PreflightResult:
+        """Check feasibility against live resources. Raise ValueError if the run cannot work."""
+        return PreflightResult()
 
     @abstractmethod
     def run(self, config: BaseModel, ctx: ExperimentContext) -> dict[str, Any]:

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from locallab.db import get_session
 from locallab.experiments.registry import list_experiments
 from locallab.models import Experiment
-from locallab.schemas.experiments import ExperimentCreate, ExperimentDetail, ExperimentOut, ExperimentTypeOut
+from locallab.schemas.experiments import ExperimentCreate, ExperimentDetail, ExperimentOut, ExperimentTypeOut, ValidationReport
 from locallab.services import experiments as experiment_service
 
 router = APIRouter(tags=["experiments"])
@@ -22,9 +22,14 @@ def _out(exp: Experiment) -> ExperimentOut:
 def experiment_types():
     return [
         ExperimentTypeOut(type=e.type_name, title=e.title, description=e.description,
-                          config_schema=e.config_model.model_json_schema())
+                          config_schema=e.config_model.model_json_schema(), presets=e.presets)
         for e in list_experiments()
     ]
+
+
+@router.post("/experiments/validate", response_model=ValidationReport)
+def validate(body: ExperimentCreate):
+    return experiment_service.validate_experiment(body)
 
 
 @router.post("/experiments", response_model=ExperimentDetail, status_code=201)
@@ -45,8 +50,11 @@ def _detail(exp: Experiment) -> ExperimentDetail:
 
 
 @router.get("/experiments", response_model=list[ExperimentOut])
-def list_experiments_(limit: int = 100, session: Session = Depends(get_session)):
-    rows = session.scalars(select(Experiment).order_by(Experiment.id.desc()).limit(min(limit, 500))).all()
+def list_experiments_(limit: int = 100, type: str | None = None, session: Session = Depends(get_session)):
+    q = select(Experiment).order_by(Experiment.id.desc()).limit(min(limit, 500))
+    if type:
+        q = q.where(Experiment.type == type)
+    rows = session.scalars(q).all()
     return [_out(e) for e in rows]
 
 

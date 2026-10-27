@@ -24,6 +24,7 @@ class JobContext:
         self._settings = settings
         self._shutdown = shutdown  # threading.Event
         self._last_hb = 0.0
+        self._last_progress = 0.0
 
     def log(self, level: str, message: str) -> None:
         with session_scope() as s:
@@ -41,6 +42,16 @@ class JobContext:
             assert job is not None
             job.heartbeat_at = utcnow()
             return job.cancel_requested
+
+    def set_progress(self, progress: dict[str, Any]) -> None:
+        now = time.monotonic()
+        if now - self._last_progress < 0.9:
+            return
+        self._last_progress = now
+        with session_scope() as s:
+            job = s.get(Job, self.job_id)
+            assert job is not None
+            job.progress = progress
 
     def check_cancel(self) -> None:
         # Poll the DB flag on every check at the heartbeat cadence; cancellation latency <= ~2s.

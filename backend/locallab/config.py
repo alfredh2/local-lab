@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     log_json: bool = False
     hf_cache_dir: Path = Path("~/.cache/huggingface/hub")
     ollama_url: str = "http://127.0.0.1:11434"
+    # Hosts experiments may send inference traffic to (guards against SSRF via the API).
+    allowed_runtime_hosts: list[str] = ["127.0.0.1", "localhost", "::1"]
     worker_poll_s: float = 1.0
     worker_stale_s: float = 30.0
 

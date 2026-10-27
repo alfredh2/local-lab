@@ -1,7 +1,8 @@
 from locallab.experiments.base import Experiment
 from locallab.experiments.diagnostic import DiagnosticExperiment
+from locallab.experiments.inference.experiment import InferenceBenchmark
 
-_TYPES: dict[str, Experiment] = {e.type_name: e for e in (DiagnosticExperiment(),)}
+_TYPES: dict[str, Experiment] = {e.type_name: e for e in (DiagnosticExperiment(), InferenceBenchmark())}
 
 
 def get_experiment(type_name: str) -> Experiment:

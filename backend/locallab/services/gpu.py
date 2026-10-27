@@ -40,7 +40,8 @@ def _s(v: str | bytes) -> str:
 
 def _processes(handle) -> list[GpuProcess]:
     procs: list[GpuProcess] = []
-    for fn in (pynvml.nvmlDeviceGetComputeRunningProcesses, pynvml.nvmlDeviceGetGraphicsRunningProcesses):
+    for kind, fn in (("compute", pynvml.nvmlDeviceGetComputeRunningProcesses),
+                     ("graphics", pynvml.nvmlDeviceGetGraphicsRunningProcesses)):
         try:
             for p in fn(handle):
                 try:
@@ -48,7 +49,7 @@ def _processes(handle) -> list[GpuProcess]:
                 except pynvml.NVMLError:
                     name = None
                 mem = None if p.usedGpuMemory is None else p.usedGpuMemory / _MB
-                procs.append(GpuProcess(pid=p.pid, name=name, used_memory_mb=mem))
+                procs.append(GpuProcess(pid=p.pid, name=name, used_memory_mb=mem, kind=kind))
         except pynvml.NVMLError_NotSupported:
             continue
     return procs
@@ -135,4 +136,62 @@ class GpuHistory:
     def stop(self) -> None:
         self._stop.set()
         if self._thread:
+            self._thread.join(timeout=3)
+
+
+def sample_gpu_light() -> list[dict]:
+    """Cheap per-GPU sample (no process enumeration) for high-rate sampling during runs."""
+    _ensure_init()
+    out = []
+    for i in range(pynvml.nvmlDeviceGetCount()):
+        h = pynvml.nvmlDeviceGetHandleByIndex(i)
+        try:
+            util: float | None = float(pynvml.nvmlDeviceGetUtilizationRates(h).gpu)
+        except pynvml.NVMLError_NotSupported:
+            util = None
+        pw = _opt(pynvml.nvmlDeviceGetPowerUsage, h)
+        out.append({
+            "index": i,
+            "memory_used_mb": pynvml.nvmlDeviceGetMemoryInfo(h).used / _MB,
+            "utilization_gpu_pct": util,
+            "temperature_c": _opt(pynvml.nvmlDeviceGetTemperature, h, pynvml.NVML_TEMPERATURE_GPU),
+            "power_w": None if pw is None else pw / 1000,
+        })
+    return out
+
+
+class GpuSampler:
+    """Background thread recording device-level GPU stats on the time.perf_counter() clock."""
+
+    def __init__(self, interval_s: float = 0.25) -> None:
+        self.interval_s = interval_s
+        self.samples: list[dict] = []
+        self.error: str | None = None
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, name="gpu-sampler", daemon=True)
+
+    def _take(self) -> None:
+        import time
+
+        t = time.perf_counter()
+        for g in sample_gpu_light():
+            self.samples.append({"t": t, **g})
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._take()
+            except pynvml.NVMLError as e:
+                self.error = str(e)
+                log.warning("GPU sampler stopped: %s", e)
+                return
+            self._stop.wait(self.interval_s)
+
+    def start(self) -> None:
+        self._take()  # synchronous first sample = baseline; raises if NVML is unavailable
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread.is_alive():
             self._thread.join(timeout=3)

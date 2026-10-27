@@ -7,6 +7,7 @@ class GpuProcess(BaseModel):
     pid: int
     name: str | None
     used_memory_mb: float | None
+    kind: str = "compute"  # compute | graphics
 
 
 class GpuInfo(BaseModel):
