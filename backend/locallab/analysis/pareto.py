@@ -127,8 +127,9 @@ def analyze(configs: list[dict[str, Any]], objectives: list[dict[str, str]], con
         for o in objectives:
             p = cfg["metrics"][o["metric"]]
             if p.n is not None and p.n < 20 and o["metric"] in (metric_info or {}) and (metric_info or {})[o["metric"]].kind == "quality":
-                warnings.append(f"{cfg['id']}: {o['metric']} rests on only {p.n} samples (interval {p.lo:.2f}–{p.hi:.2f})"
-                                if p.lo is not None and p.hi is not None else f"{cfg['id']}: {o['metric']} rests on only {p.n} samples")
+                who = cfg.get("label") or cfg["id"]
+                warnings.append(f"{who}: {o['metric']} rests on only {p.n} samples (interval {p.lo:.2f}–{p.hi:.2f})"
+                                if p.lo is not None and p.hi is not None else f"{who}: {o['metric']} rests on only {p.n} samples")
     out: dict[str, Any] = {"objectives": objectives, "constraints": constraints, "feasible": [c["id"] for c in feasible],
                            "excluded": excluded, "front": front, "dominated": dominated, "warnings": warnings}
     if weights:

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CartesianGrid, ErrorBar, Legend, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { CartesianGrid, LabelList, Legend, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { api, API_URL, type ConfigResultRec, type ExperimentDetail, type ManagedServerRec, type MetricInfo, type ParetoResponse } from "@/lib/api";
 import { fmtDuration } from "@/lib/format";
 import { btn, btnGhost, Card, Empty, ErrorBox, Pill, StatusBadge } from "@/components/ui";
@@ -18,6 +18,8 @@ function fmtMetric(m: MetricInfo | undefined, v: number | null | undefined) {
   if (m.unit === "tok/s" || m.unit === "MB" || m.unit === "tokens") return Math.round(v).toLocaleString();
   return v.toFixed(v < 10 ? 2 : 1);
 }
+const why = (r: ConfigResultRec) => (r.error && r.failure_kind && r.error.startsWith(r.failure_kind) ? r.error : `${r.failure_kind ?? ""}${r.error ? ": " + r.error : ""}`);
+const hasData = (r: ConfigResultRec) => !!(r.results?.performance || r.results?.quality);
 const short = (l: string) => l.replace("Qwen/", "").replace(" · ctx ", " ctx ").replace("Instruct", "I");
 
 export default function OptimizationView({ id }: { id: number }) {
@@ -95,7 +97,7 @@ function StatusTable({ rows }: { rows: ConfigResultRec[] }) {
         <tbody className="divide-y divide-zinc-800">{rows.map((r) => (
           <tr key={r.key}><td className="px-4 py-2">{r.label}</td><td className="px-4 py-2"><Pill tone={STATUS_TONE[r.status]}>{r.status}</Pill></td>
             <td className="px-4 py-2 tabular-nums">{r.attempts}</td><td className="px-4 py-2 tabular-nums">{r.results?.startup_s ? `${r.results.startup_s.toFixed(0)}s` : "—"}</td>
-            <td className="max-w-md truncate px-4 py-2 text-xs text-zinc-500" title={r.error ?? ""}>{r.status === "completed" ? (r.results?.gpu?.contended ? "contended GPU" : "") : `${r.failure_kind ?? ""}${r.error ? ": " + r.error : ""}`}</td></tr>))}</tbody></table>
+            <td className="max-w-md truncate px-4 py-2 text-xs text-zinc-500" title={r.error ?? ""}>{r.status === "completed" ? (r.results?.gpu?.contended ? "contended GPU" : "") : why(r)}</td></tr>))}</tbody></table>
     </Card>
   );
 }
@@ -211,8 +213,12 @@ function ComparisonTable({ d, mi, front }: { d: ParetoResponse; mi: Record<strin
 function ParetoChart({ d, x, y, setX, setY, mi }: { d: ParetoResponse; x: string; y: string; setX: (s: string) => void; setY: (s: string) => void; mi: Record<string, MetricInfo> }) {
   const a = d.analysis;
   const status = (id: string) => (!a ? "plain" : a.front.includes(id) ? "front" : a.excluded.some((e) => e.id === id) ? "excluded" : "dominated");
+  const multiCtx = new Set(d.points.map((p) => p.config.max_model_len)).size > 1;
+  const tiny = (l: string) => l.replace(/^[^/]+\//, "").replace(/-Instruct/, "").replace(multiCtx ? /$^/ : / · ctx \d+/, "");
   const mk = (p: any) => { const vx = p.values[x], vy = p.values[y]; if (!vx || !vy) return null;
-    return { id: p.id, name: short(p.label), x: vx.display, y: vy.display, xe: vx.lo != null ? [vx.display - vx.lo, vx.hi! - vx.display] : 0, ye: vy.lo != null ? [vy.display - vy.lo, vy.hi! - vy.display] : 0, s: status(p.id) }; };
+    return { id: p.id, name: tiny(p.label), x: vx.display, y: vy.display, s: status(p.id),
+      xi: vx.lo != null && vx.hi != null ? [{ x: vx.lo, y: vy.display }, { x: vx.hi, y: vy.display }] : null,
+      yi: vy.lo != null && vy.hi != null ? [{ x: vx.display, y: vy.lo }, { x: vx.display, y: vy.hi }] : null }; };
   const data = d.points.map(mk).filter(Boolean) as any[];
   const by = (s: string) => data.filter((p) => p.s === s);
   const opts = d.metrics.map((m) => <option key={m.id} value={m.id}>{m.label}</option>);
@@ -222,11 +228,11 @@ function ParetoChart({ d, x, y, setX, setY, mi }: { d: ParetoResponse; x: string
       <div className="mb-2 flex flex-wrap gap-3 text-xs text-zinc-400">
         <label>X <select className="ml-1 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5" value={x} onChange={(e) => setX(e.target.value)}>{opts}</select></label>
         <label>Y <select className="ml-1 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5" value={y} onChange={(e) => setY(e.target.value)}>{opts}</select></label>
-        <span className="text-zinc-500">axes are oriented so up/right is better</span>
+        <span className="text-zinc-500">axes are oriented so up/right is better; bars are 95% intervals (Wilson for rates, CI across iterations for performance)</span>
       </div>
       <div style={{ height: 340 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 10, right: 30, bottom: 28, left: 8 }}>
+          <ScatterChart margin={{ top: 28, right: 70, bottom: 28, left: 8 }}>
             <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
             <XAxis type="number" dataKey="x" name={mi[x]?.label} stroke="#71717a" fontSize={11} {...axisProps(mi[x])} label={{ value: `${mi[x]?.label ?? ""} (${mi[x]?.percent ? "%" : mi[x]?.unit})${mi[x]?.direction === "min" ? " — lower is better →" : ""}`, position: "insideBottom", offset: -16, fill: "#a1a1aa", fontSize: 11 }} />
             <YAxis type="number" dataKey="y" name={mi[y]?.label} stroke="#71717a" fontSize={11} width={52} {...(mi[y]?.direction === "min" ? { reversed: true } : {})} domain={mi[y]?.percent ? [0, 100] : ["auto", "auto"]} />
@@ -234,14 +240,15 @@ function ParetoChart({ d, x, y, setX, setY, mi }: { d: ParetoResponse; x: string
             <Tooltip contentStyle={TIP} cursor={{ strokeDasharray: "3 3" }} content={({ payload }) => { const p: any = payload?.[0]?.payload; return p ? (
               <div style={TIP} className="p-2"><div className="font-medium">{p.name}</div><div>{mi[x]?.label}: {fmtMetric(mi[x], p.x)}</div><div>{mi[y]?.label}: {fmtMetric(mi[y], p.y)}</div><div className="text-zinc-400">{p.s === "front" ? "non-dominated" : p.s === "dominated" ? "dominated" : p.s === "excluded" ? "excluded by constraint / missing metric" : ""}</div></div>) : null; }} />
             <Legend wrapperStyle={{ fontSize: 12 }} verticalAlign="top" height={24} />
-            {a && <Scatter name="dominated" data={by("dominated")} fill="transparent" stroke="#a1a1aa" strokeWidth={2} isAnimationActive={false}><ErrorBar dataKey="xe" direction="x" stroke="#52525b" width={4} /><ErrorBar dataKey="ye" direction="y" stroke="#52525b" width={4} /></Scatter>}
-            {a && <Scatter name="excluded" data={by("excluded")} fill="#3f3f46" shape="cross" isAnimationActive={false} />}
-            <Scatter name={a ? "non-dominated" : "configurations"} data={by(a ? "front" : "plain")} fill="#60a5fa" isAnimationActive={false}><ErrorBar dataKey="xe" direction="x" stroke="#60a5fa" width={4} /><ErrorBar dataKey="ye" direction="y" stroke="#60a5fa" width={4} /></Scatter>
+            {data.filter((p) => p.xi).map((p) => <Scatter key={`xi${p.id}`} data={p.xi} line={{ stroke: p.s === "front" || !a ? "#60a5fa" : "#71717a", strokeWidth: 1.5 }} lineType="joint" shape={() => <g />} legendType="none" isAnimationActive={false} />)}
+            {data.filter((p) => p.yi).map((p) => <Scatter key={`yi${p.id}`} data={p.yi} line={{ stroke: p.s === "front" || !a ? "#60a5fa" : "#71717a", strokeWidth: 1.5 }} lineType="joint" shape={() => <g />} legendType="none" isAnimationActive={false} />)}
+            {a && <Scatter name="dominated" data={by("dominated")} fill="transparent" stroke="#a1a1aa" strokeWidth={2} isAnimationActive={false}><LabelList dataKey="name" position="top" fill="#a1a1aa" fontSize={10} /></Scatter>}
+            {a && <Scatter name="excluded" data={by("excluded")} fill="#3f3f46" shape="cross" isAnimationActive={false}><LabelList dataKey="name" position="top" fill="#71717a" fontSize={10} /></Scatter>}
+            <Scatter name={a ? "non-dominated" : "configurations"} data={by(a ? "front" : "plain")} fill="#60a5fa" isAnimationActive={false}><LabelList dataKey="name" position="top" offset={8} fill="#e4e4e7" fontSize={11} /></Scatter>
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex flex-wrap gap-x-4 text-xs text-zinc-400">{data.map((p) => <span key={p.id}>● {p.name}</span>)}</div>
-      {data.length === 0 && <div className="mt-2 text-sm text-amber-300">No configuration has both selected metrics recorded.</div>}
+            {data.length === 0 && <div className="mt-2 text-sm text-amber-300">No configuration has both selected metrics recorded.</div>}
     </div>
   );
 }
@@ -266,8 +273,8 @@ function heat(rate: number) { const g = Math.round(40 + rate * 150); return `rgb
 function QualityDetails({ rows }: { rows: ConfigResultRec[] }) {
   return (
     <Card title="Quality details per configuration">
-      <div className="space-y-2">{rows.map((r) => { const suites = r.results?.quality?.suites ?? {}; return (
-        <details key={r.key} className="rounded-lg border border-zinc-800 p-3"><summary className="cursor-pointer text-sm">{r.label}<span className="ml-2 text-xs text-zinc-500">{Object.entries<any>(suites).map(([k, s]) => `${k.split("_")[0]} ${(s.interval.rate * 100).toFixed(0)}% (${s.passed}/${s.n})`).join(" · ")}</span></summary>
+      <div className="space-y-2">{rows.map((r, idx) => { const suites = r.results?.quality?.suites ?? {}; return (
+        <details key={r.key} open={idx === 0} className="rounded-lg border border-zinc-800 p-3"><summary className="cursor-pointer text-sm">{r.label}<span className="ml-2 text-xs text-zinc-500">{Object.entries<any>(suites).map(([k, s]) => `${k.split("_")[0]} ${(s.interval.rate * 100).toFixed(0)}% (${s.passed}/${s.n})`).join(" · ")}</span></summary>
           <div className="mt-3 space-y-4">{Object.entries<any>(suites).map(([name, s]) => (
             <div key={name}>
               <div className="text-sm font-medium text-zinc-300">{name} <span className="text-xs font-normal text-zinc-500">v{s.version} · {s.split} split · dataset {s.fingerprint}</span></div>
@@ -308,7 +315,7 @@ function Failures({ rows }: { rows: ConfigResultRec[] }) {
         {bad.length > 0 && <div><div className="mb-1 text-sm font-medium text-zinc-300">Configurations without results</div>
           <table className="w-full text-xs"><tbody className="divide-y divide-zinc-800">{bad.map((r) => (
             <tr key={r.key}><td className="py-1.5 pr-3 align-top">{r.label}</td><td className="pr-3 align-top"><Pill tone={STATUS_TONE[r.status]}>{r.status}</Pill></td><td className="pr-3 align-top text-zinc-400">{r.failure_kind}</td>
-              <td className="py-1.5 text-zinc-500"><div className="max-h-16 overflow-auto whitespace-pre-wrap">{r.error}</div>{r.results?.partial && <div className="text-amber-300">partial data was kept for this configuration</div>}
+              <td className="py-1.5 text-zinc-500"><div className="max-h-16 overflow-auto whitespace-pre-wrap">{r.error}</div>{r.results?.partial && hasData(r) && <div className="text-amber-300">partial data was kept for this configuration (see the comparison only if it completed)</div>}
                 {r.managed_server_id && <button type="button" className="text-blue-400 hover:underline" onClick={() => setLogFor(logFor === r.managed_server_id ? null : r.managed_server_id)}>{logFor === r.managed_server_id ? "hide" : "show"} server log</button>}</td></tr>))}</tbody></table>
           {logFor != null && server.data?.log_tail && <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-zinc-950 p-3 text-[11px] text-zinc-400">{server.data.log_tail.split("\n").slice(-120).join("\n")}</pre>}</div>}
         {cols.length > 0 && <div className="overflow-x-auto"><div className="mb-1 text-sm font-medium text-zinc-300">Evaluation failures by type</div>
