@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     allowed_runtime_hosts: list[str] = ["127.0.0.1", "localhost", "::1"]
     docker_bin: str = "docker"
     vllm_image: str = "vllm/vllm-openai:latest"
+    sandbox_image: str = "vllm/vllm-openai:latest"  # any local image with python3; runs model-written code
     managed_startup_timeout_s: float = 600.0
     reconcile_interval_s: float = 10.0
     worker_poll_s: float = 1.0

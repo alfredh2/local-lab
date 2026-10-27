@@ -4,7 +4,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from locallab.runtimes.docker import ContainerInfo, ContainerSpec, DockerError, ImageInfo
+from locallab.evals.sandbox import LocalSubprocessSandbox, SandboxResult
+from locallab.runtimes.docker import ContainerInfo, ContainerSpec, DockerError, ImageInfo, SandboxSpec
 from tests.mock_vllm import MockServer
 
 _ids = itertools.count(1)
@@ -36,6 +37,7 @@ class FakeDocker:
         self.image = ImageInfo(id="sha256:" + "ab" * 32, repo_digests=["vllm/vllm-openai@sha256:" + "cd" * 32])
         self.image_present = True
         self.oneoff_calls = 0
+        self.sandbox_error: str | None = None
         self._lock = threading.Lock()
 
     # --- helpers for tests ---
@@ -111,6 +113,16 @@ class FakeDocker:
         import json
         self.oneoff_calls += 1
         return "noise\n" + json.dumps(self.arch_list) + "\n"
+
+    def run_sandbox(self, spec: SandboxSpec) -> SandboxResult:
+        """Executes the harness on the host (tests only; trusted reference/mock code, never real model output)."""
+        from pathlib import Path
+
+        self.calls.append(("sandbox", spec.name))
+        if self.sandbox_error:
+            return SandboxResult(None, "", "", error=self.sandbox_error)
+        files = {p.name: p.read_text() for p in Path(spec.host_dir).iterdir()}
+        return LocalSubprocessSandbox().run_python(files, spec.entry, spec.timeout_s)
 
     def alive(self) -> list[FakeContainer]:
         return [c for c in self.containers.values() if c.status == "running"]

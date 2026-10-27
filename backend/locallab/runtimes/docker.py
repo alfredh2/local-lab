@@ -63,6 +63,18 @@ class ContainerSpec:
 
 
 @dataclass
+class SandboxSpec:
+    name: str
+    image: str
+    host_dir: str  # mounted read-only at /work
+    entry: str
+    labels: dict[str, str]
+    timeout_s: float = 10.0
+    memory: str = "512m"
+    cpus: str = "1"
+
+
+@dataclass
 class ImageInfo:
     id: str
     repo_digests: list[str]
@@ -70,6 +82,10 @@ class ImageInfo:
 
 def new_container_name(job_id: int) -> str:
     return f"{NAME_PREFIX}{job_id}-{secrets.token_hex(3)}"
+
+
+def new_sandbox_name() -> str:
+    return f"{NAME_PREFIX}sbx-{secrets.token_hex(4)}"  # same prefix: covered by ownership checks and reconciliation
 
 
 def _check_token(value: str, what: str) -> str:
@@ -88,6 +104,7 @@ class DockerAPI(Protocol):
     def list_by_label(self, label: str) -> list[ContainerInfo]: ...
     def image_inspect(self, ref: str) -> ImageInfo | None: ...
     def run_oneoff(self, image: str, entrypoint: str, args: list[str], env: dict[str, str], timeout_s: int) -> str: ...
+    def run_sandbox(self, spec: SandboxSpec) -> "SandboxResult": ...
 
 
 class DockerCLI:
@@ -165,6 +182,31 @@ class DockerCLI:
         for k, v in env.items():
             argv += ["-e", f"{k}={v}"]
         return self._run(argv + [image, *args], timeout=timeout_s).stdout
+
+
+    def run_sandbox(self, spec: SandboxSpec) -> "SandboxResult":
+        """Run python on files in `spec.host_dir` with no network, read-only root and hard resource limits."""
+        from locallab.evals.sandbox import MAX_OUTPUT, SandboxResult
+
+        _check_token(spec.name, "container name")
+        _check_token(spec.image, "image")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+\.py", spec.entry):
+            raise DockerError(f"unsafe entry file: {spec.entry!r}")
+        argv = ["run", "--rm", "--name", spec.name, "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
+                "--memory", spec.memory, "--memory-swap", spec.memory, "--cpus", spec.cpus, "--pids-limit", "64",
+                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "65534:65534",
+                "-v", f"{spec.host_dir}:/work:ro", "--workdir", "/work", "--entrypoint", "python3"]
+        for k, v in spec.labels.items():
+            argv += ["--label", f"{_check_token(k, 'label key')}={v}"]
+        argv += [spec.image, "-I", "-B", f"/work/{spec.entry}"]
+        try:
+            p = subprocess.run([self.binary, *argv], capture_output=True, text=True, timeout=spec.timeout_s + 8)  # + container start-up
+        except subprocess.TimeoutExpired:
+            self._run(["rm", "-f", spec.name], check=False)
+            return SandboxResult(None, "", "", timed_out=True)
+        except FileNotFoundError as e:
+            raise DockerError(f"docker binary not found: {self.binary}") from e
+        return SandboxResult(p.returncode, p.stdout[:MAX_OUTPUT], p.stderr[:MAX_OUTPUT], oom_killed=p.returncode == 137)
 
 
 class OwnedDocker:
