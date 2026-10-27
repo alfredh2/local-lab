@@ -11,6 +11,7 @@
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white">
   <img alt="vLLM" src="https://img.shields.io/badge/vLLM-managed-5C3EE8">
   <img alt="Tests" src="https://img.shields.io/badge/backend%20tests-204%20passing-brightgreen">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
 </p>
 
 <p align="center">
@@ -129,4 +130,8 @@ Most tests run against an in-process mock of vLLM's OpenAI-compatible API and an
 
 ## Status and limitations
 
-Built and tested on one machine (Ubuntu 24.04, RTX 5090, driver 595, vLLM 0.16.0). Currently vLLM only, one GPU, no authentication. Quality results come from small eval sets (18 JSON, 13 coding, 30 retrieval cases per configuration) and a single greedy run, so wide intervals are expected and shown. Coding answers run in a locked-down container, but model code shares a process with the test harness, which is fine for non-adversarial local models and is not a security boundary. No license has been chosen yet.
+Built and tested on one machine (Ubuntu 24.04, RTX 5090, driver 595, vLLM 0.16.0). Currently vLLM only, one GPU, no authentication. Quality results come from small eval sets (18 JSON, 13 coding, 30 retrieval cases per configuration) and a single greedy run, so wide intervals are expected and shown. Coding answers run in a locked-down container, but model code shares a process with the test harness, which is fine for non-adversarial local models and is not a security boundary.
+
+## License
+
+[MIT](LICENSE)
