@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from locallab import __version__
-from locallab.api import system
+from locallab.api import models, system
 from locallab.config import get_settings
 from locallab.db import init_db
 from locallab.logging import configure_logging
@@ -32,6 +32,7 @@ def create_app() -> FastAPI:
         CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"]
     )
     app.include_router(system.router, prefix="/api")
+    app.include_router(models.router, prefix="/api")
     return app
 
 
