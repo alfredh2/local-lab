@@ -105,3 +105,44 @@ class Artifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     job: Mapped[Job] = relationship(back_populates="artifacts")
+
+
+class ManagedServer(Base):
+    """A LocalLab-launched inference server container (one row per launch)."""
+
+    __tablename__ = "managed_servers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), index=True)
+    container_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    container_name: Mapped[str] = mapped_column(String(128), unique=True)
+    instance_id: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default="starting", index=True)  # starting|ready|stopped|failed|orphan_removed
+    image_ref: Mapped[str] = mapped_column(String(255))
+    image_id: Mapped[str | None] = mapped_column(String(128))
+    image_digest: Mapped[str | None] = mapped_column(String(255))
+    host_port: Mapped[int | None] = mapped_column(Integer)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # validated runtime config
+    command: Mapped[list[str] | None] = mapped_column(JSON)  # exact docker argv
+    model: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # registry snapshot incl. revision
+    launched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime)
+    startup_s: Mapped[float | None] = mapped_column()
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime)
+    stop_reason: Mapped[str | None] = mapped_column(Text)
+    exit_code: Mapped[int | None] = mapped_column(Integer)
+    oom_killed: Mapped[bool | None] = mapped_column(Boolean)
+    log_tail: Mapped[str | None] = mapped_column(Text)  # last lines of container logs (truncated)
+
+
+class RuntimeConfig(Base):
+    """A reusable, named model/runtime configuration for managed servers."""
+
+    __tablename__ = "runtime_configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    runtime: Mapped[str] = mapped_column(String(32), default="vllm")
+    registry_model_id: Mapped[int | None] = mapped_column(ForeignKey("models.id"))
+    config: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

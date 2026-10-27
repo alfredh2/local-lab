@@ -163,8 +163,11 @@ def sample_gpu_light() -> list[dict]:
 class GpuSampler:
     """Background thread recording device-level GPU stats on the time.perf_counter() clock."""
 
-    def __init__(self, interval_s: float = 0.25) -> None:
+    def __init__(self, interval_s: float = 0.25, pid_provider=None, process_every: int = 4) -> None:
         self.interval_s = interval_s
+        self.pid_provider = pid_provider  # callable -> set[int]; enables per-process memory attribution
+        self.process_every = process_every
+        self._n = 0
         self.samples: list[dict] = []
         self.error: str | None = None
         self._stop = threading.Event()
@@ -174,8 +177,15 @@ class GpuSampler:
         import time
 
         t = time.perf_counter()
+        server_mb = None
+        if self.pid_provider is not None and self._n % self.process_every == 0:
+            try:
+                server_mb = process_gpu_memory_mb(self.pid_provider())
+            except Exception as e:  # attribution is best-effort; never break sampling
+                log.debug("per-process attribution failed: %s", e)
+        self._n += 1
         for g in sample_gpu_light():
-            self.samples.append({"t": t, **g})
+            self.samples.append({"t": t, **g, **({"server_memory_mb": server_mb} if g["index"] == 0 and server_mb is not None else {})})
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -195,3 +205,26 @@ class GpuSampler:
         self._stop.set()
         if self._thread.is_alive():
             self._thread.join(timeout=3)
+
+
+def compute_capability(index: int = 0) -> tuple[int, int] | None:
+    try:
+        _ensure_init()
+        return tuple(pynvml.nvmlDeviceGetCudaComputeCapability(pynvml.nvmlDeviceGetHandleByIndex(index)))  # type: ignore[return-value]
+    except pynvml.NVMLError:
+        return None
+
+
+def process_gpu_memory_mb(pids: set[int], index: int = 0) -> float | None:
+    """Sum of NVML per-process GPU memory for `pids` (None if NVML cannot attribute it)."""
+    try:
+        _ensure_init()
+        h = pynvml.nvmlDeviceGetHandleByIndex(index)
+        total, seen = 0.0, False
+        for p in pynvml.nvmlDeviceGetComputeRunningProcesses(h):
+            if p.pid in pids and p.usedGpuMemory is not None:
+                total += p.usedGpuMemory / _MB
+                seen = True
+        return total if seen else None
+    except pynvml.NVMLError:
+        return None

@@ -18,8 +18,15 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     # Hosts experiments may send inference traffic to (guards against SSRF via the API).
     allowed_runtime_hosts: list[str] = ["127.0.0.1", "localhost", "::1"]
+    docker_bin: str = "docker"
+    vllm_image: str = "vllm/vllm-openai:latest"
+    managed_startup_timeout_s: float = 600.0
     worker_poll_s: float = 1.0
     worker_stale_s: float = 30.0
+
+    @property
+    def instance_id_path(self) -> Path:
+        return self.data_dir / "instance_id"
 
     @property
     def artifacts_dir(self) -> Path:

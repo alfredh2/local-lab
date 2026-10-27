@@ -99,11 +99,13 @@ def build_app(st: MockState) -> FastAPI:
 
 
 class MockServer:
-    def __init__(self, **kw) -> None:
+    def __init__(self, port: int | None = None, **kw) -> None:
         self.state = MockState(**kw)
-        with socket.socket() as s:
-            s.bind(("127.0.0.1", 0))
-            self.port = s.getsockname()[1]
+        if port is None:
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+        self.port = port
         self.server = uvicorn.Server(uvicorn.Config(build_app(self.state), host="127.0.0.1", port=self.port, log_level="error"))
         self.thread = threading.Thread(target=self.server.run, daemon=True)
 
