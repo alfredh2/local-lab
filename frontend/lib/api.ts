@@ -1,4 +1,5 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8321";
+// Same-origin by default (proxied by Next). Set NEXT_PUBLIC_API_URL to call an API directly.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export type Gpu = {
   index: number; name: string; uuid: string;
