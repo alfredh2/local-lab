@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ErrorBar, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type Artifact, type Job, type ManagedServerRec } from "@/lib/api";
@@ -72,9 +72,16 @@ export function useManagedServer(jobId: number | undefined, enabled: boolean) {
     queryKey: ["managed-server", jobId], enabled: enabled && !!jobId,
     queryFn: async () => {
       const list = await api<ManagedServerRec[]>(`/managed-servers?job_id=${jobId}`);
-      return list[0] ? api<ManagedServerRec>(`/managed-servers/${list[0].id}`) : null;
+      const mine = list.find((x) => x.job_id === jobId); // never show another job's server
+      return mine ? api<ManagedServerRec>(`/managed-servers/${mine.id}`) : null;
     },
   });
+}
+
+function LogView({ text }: { text: string }) {
+  const ref = useRef<HTMLPreElement>(null);
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [text]); // errors are at the end
+  return <pre ref={ref} className="mt-2 max-h-80 overflow-auto rounded-lg bg-zinc-950 p-3 text-[11px] leading-snug text-zinc-400">{text}</pre>;
 }
 
 export function ServerCard({ ms, defaultOpen = false }: { ms: ManagedServerRec; defaultOpen?: boolean }) {
@@ -89,7 +96,7 @@ export function ServerCard({ ms, defaultOpen = false }: { ms: ManagedServerRec; 
       </dl>
       {ms.log_tail && (
         <details className="mt-3" open={defaultOpen}><summary className="cursor-pointer text-sm text-zinc-400">Launch / server log (last {ms.log_tail.split("\n").length} lines)</summary>
-          <pre className="mt-2 max-h-80 overflow-auto rounded-lg bg-zinc-950 p-3 text-[11px] leading-snug text-zinc-400">{ms.log_tail}</pre></details>
+          <LogView text={ms.log_tail} /></details>
       )}
     </Card>
   );
@@ -163,13 +170,17 @@ export default function SweepResults({ job, artifacts }: { job: Job; artifacts: 
             { key: "util", label: "Peak util % (right)", color: C.amber, axis: "right" as const, dashed: true }]} />
           <p className="mt-1 text-xs text-zinc-500">Device-wide memory includes every process on the GPU and vLLM&apos;s preallocated KV cache{hasSrvMem ? "; the server line is per-process via NVML for the managed container" : ""}.</p>
         </Card>
-        <Card title="Failed requests (%)" className="lg:col-span-2">
-          <div style={{ height: 160 }}><ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 6, right: 12, bottom: 16, left: 0 }}>
-              <CartesianGrid stroke="#27272a" strokeDasharray="3 3" /><XAxis dataKey="c" stroke="#71717a" fontSize={11} label={{ value: "concurrency", position: "insideBottom", offset: -8, fill: "#71717a", fontSize: 11 }} />
-              <YAxis stroke="#71717a" fontSize={11} width={40} domain={[0, 100]} unit="%" /><Tooltip contentStyle={TIP} formatter={(v) => `${Number(v).toFixed(1)}%`} labelFormatter={(c) => `concurrency ${c}`} />
-              <Bar dataKey="fail" name="failed" fill={C.red} isAnimationActive={false} />
-            </BarChart></ResponsiveContainer></div>
+        <Card title="Failed requests" className="lg:col-span-2">
+          {data.every((d) => d.fail === 0) ? (
+            <div className="flex items-center gap-3 text-sm text-zinc-300"><Pill tone="green">0%</Pill>No request failed at any concurrency level ({levels.reduce((n, l) => n + (l.requests?.attempted ?? 0), 0).toLocaleString()} measured requests).</div>
+          ) : (
+            <div style={{ height: 160 }}><ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 6, right: 12, bottom: 16, left: 0 }}>
+                <CartesianGrid stroke="#27272a" strokeDasharray="3 3" /><XAxis dataKey="c" stroke="#71717a" fontSize={11} label={{ value: "concurrency", position: "insideBottom", offset: -8, fill: "#71717a", fontSize: 11 }} />
+                <YAxis stroke="#71717a" fontSize={11} width={40} domain={[0, 100]} unit="%" /><Tooltip contentStyle={TIP} formatter={(v) => `${Number(v).toFixed(1)}%`} labelFormatter={(c) => `concurrency ${c}`} />
+                <Bar dataKey="fail" name="failed" fill={C.red} isAnimationActive={false} />
+              </BarChart></ResponsiveContainer></div>
+          )}
         </Card>
       </div>
 

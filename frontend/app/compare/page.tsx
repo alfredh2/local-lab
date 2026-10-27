@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueries } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type ExperimentDetail } from "@/lib/api";
+import SweepCompare from "@/components/SweepCompare";
 import { Card, Empty, ErrorBox } from "@/components/ui";
 
 const COLORS = ["#60a5fa", "#fbbf24", "#34d399", "#f87171", "#c084fc", "#22d3ee"];
@@ -31,7 +32,13 @@ function CompareInner() {
   if (ids.length < 2) return <Empty title="Pick at least two runs">Select completed inference benchmarks on the <Link href="/experiments" className="text-blue-400 hover:underline">Experiments</Link> page.</Empty>;
   if (err) return <ErrorBox error={err.error} />;
   if (results.some((r) => !r.data)) return <div className="h-32 animate-pulse rounded-xl bg-zinc-900" />;
-  const runs = results.map((r) => r.data!).map((e) => ({ e, r: e.jobs.at(-1)?.results, ok: e.type === "inference_benchmark" && e.jobs.at(-1)?.status === "completed" }));
+  const all = results.map((r) => r.data!);
+  const done = (e: ExperimentDetail) => e.jobs.at(-1)?.status === "completed";
+  if (all.every((e) => e.type === "concurrency_sweep" && done(e))) {
+    return (<div className="space-y-6"><div><Link href="/experiments" className="text-xs text-zinc-500 hover:underline">← Experiments</Link><h1 className="mt-1 text-xl font-semibold">Compare concurrency sweeps</h1></div><SweepCompare runs={all} /></div>);
+  }
+  if (all.some((e) => e.type === "concurrency_sweep")) return <ErrorBox error="Sweeps can only be compared with other sweeps (select completed sweeps only)." />;
+  const runs = all.map((e) => ({ e, r: e.jobs.at(-1)?.results, ok: e.type === "inference_benchmark" && done(e) }));
   const bad = runs.filter((x) => !x.ok);
   if (bad.length) return <ErrorBox error={`Only completed inference benchmarks can be compared. Not comparable: ${bad.map((x) => "#" + x.e.id).join(", ")}`} />;
   const label = (x: (typeof runs)[number]) => `#${x.e.id} ${x.r!.runtime.served_model.id}`;

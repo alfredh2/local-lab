@@ -125,7 +125,7 @@ export default function SweepForm() {
           {models.data && hf.length === 0 && <div className="text-xs text-amber-300">No servable models registered. Scan the Models page first.</div>}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Context length"><input type="number" className={input} value={rt.max_model_len} onChange={(e) => setR("max_model_len", num(e.target.value))} /></Field>
-            <Field label="GPU memory share" hint="0.05–0.95"><input type="number" step={0.05} min={0.05} max={0.95} className={input} value={rt.gpu_memory_utilization} onChange={(e) => setR("gpu_memory_utilization", num(e.target.value))} /></Field>
+            <Field label="GPU memory share"><input type="number" step={0.05} min={0.05} max={0.95} className={input} value={rt.gpu_memory_utilization} onChange={(e) => setR("gpu_memory_utilization", num(e.target.value))} /></Field>
             <Field label="dtype"><select className={input} value={rt.dtype} onChange={(e) => setR("dtype", e.target.value)}>{["auto", "bfloat16", "float16", "float32"].map((d) => <option key={d}>{d}</option>)}</select></Field>
             <Field label="Quantization"><select className={input} value={rt.quantization} onChange={(e) => setR("quantization", e.target.value)}>{["none", "awq", "gptq", "fp8"].map((d) => <option key={d}>{d}</option>)}</select></Field>
             <Field label="KV cache dtype"><select className={input} value={rt.kv_cache_dtype} onChange={(e) => setR("kv_cache_dtype", e.target.value)}>{["auto", "fp8"].map((d) => <option key={d}>{d}</option>)}</select></Field>

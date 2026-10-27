@@ -126,7 +126,7 @@ class InferenceBenchmark(Experiment):
                 last_health = time.monotonic()
                 problem = await asyncio.to_thread(health)
                 if problem:
-                    exc.append(ServerCrashed(problem))
+                    exc.append(ServerCrashed(f"Inference server crashed: {problem}"))
                     body.cancel()
                     return
             elapsed = time.perf_counter() - progress.phase_started if progress.phase_started else 0

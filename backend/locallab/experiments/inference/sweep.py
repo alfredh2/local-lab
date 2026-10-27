@@ -233,7 +233,7 @@ class ConcurrencySweep(Experiment):
                 crash = monitor_exc[0]
                 if isinstance(crash, ServerCrashed) and any(lv["status"] == "ok" for lv in levels):
                     c = progress.context["sweep"]["concurrency"]  # keep finished levels; the crash is itself a finding
-                    levels.append({"concurrency": c, "status": "failed", "error": f"server crashed: {crash}",
+                    levels.append({"concurrency": c, "status": "failed", "error": f"{crash}",
                                    "num_requests": cfg.level_requests(c)})
                     state["stopped_early"] = f"server crashed during concurrency {c}"
                     ctx.log("ERROR", f"{crash}")

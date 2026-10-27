@@ -156,4 +156,4 @@ def classify_launch_failure(logs: str, oom_killed: bool = False) -> tuple[str, s
     for kind, rx, msg in FAILURE_PATTERNS:
         if rx.search(logs):
             return kind, msg
-    return "launch_failed", "The server exited during startup; see the launch log for details."
+    return "launch_failed", "The server container exited; see the server log for details."
