@@ -304,6 +304,55 @@ def test_sandbox_infrastructure_failure_is_not_blamed_on_the_model(mx):
     assert s["aggregate"]["failures_by_type"] == {"sandbox_error": 13} and r["status"] == "completed"
 
 
+@needs_gpu
+def test_gpu_is_rechecked_before_each_launch(mx, monkeypatch):
+    """Another job can start between configurations: the next launch must not go ahead blindly."""
+    from locallab.services.gpu_preflight import GpuPreflight
+
+    client, fd, ids, worker = mx
+    calls = {"n": 0}
+
+    def fake(index, util, allow, exclude_pids=None):
+        calls["n"] += 1
+        ok = calls["n"] == 1  # first launch sees an idle GPU, later ones see someone else's job
+        base = dict(gpu_index=0, name="Fake", total_mb=32768, free_mb=20000 if ok else 6000, requested_mb=util * 32768,
+                    compute_capability=(12, 0), contended=not ok, override=allow)
+        if ok:
+            return GpuPreflight(**base)
+        if allow:
+            return GpuPreflight(**base, warnings=["GPU 0 is in use by other work (override)"])
+        return GpuPreflight(**base, errors=["GPU 0 is in use by other work. Refusing to benchmark on a contended GPU."])
+
+    monkeypatch.setattr(opt, "check_gpu", fake)
+    eid, jid = submit(client, body(ids, registry_model_ids=[ids["a"], ids["b"]]))
+    worker.tick()
+    j = job(client, jid)
+    assert j["status"] == "completed" and j["results"]["counts"] == {"completed": 1, "failed": 1}
+    bad = next(r for r in rows(client, eid).values() if r["status"] == "failed")
+    assert bad["failure_kind"] == "gpu_contended" and "Refusing to benchmark" in bad["error"] and bad["managed_server_id"] is None
+    assert len(runs(fd)) == 1 and fd.containers == {}  # the second configuration never launched a container
+    # the same situation with an explicit override proceeds, and records what the launch saw
+    calls["n"] = 0
+    eid2, jid2 = submit(client, body(ids, registry_model_ids=[ids["a"], ids["b"]], allow_contention=True))
+    worker.tick()
+    rs2 = list(rows(client, eid2).values())
+    assert job(client, jid2)["results"]["counts"] == {"completed": 2}
+    assert [r["results"]["gpu"]["preflight"]["contended"] for r in sorted(rs2, key=lambda r: r["id"])] == [False, True]
+
+
+@needs_gpu
+def test_insufficient_free_memory_at_launch_is_not_overridable(mx, monkeypatch):
+    from locallab.services.gpu_preflight import GpuPreflight
+
+    client, fd, ids, worker = mx
+    monkeypatch.setattr(opt, "check_gpu", lambda index, util, allow, exclude_pids=None: GpuPreflight(
+        gpu_index=0, total_mb=32768, free_mb=5000, requested_mb=9830, errors=["requests 9830 MB but only 5000 MB is free. (This cannot be overridden.)"]))
+    eid, jid = submit(client, body(ids, allow_contention=True))
+    worker.tick()
+    j = job(client, jid)
+    assert j["status"] == "failed" and "insufficient_free_memory" in j["error"] and fd.calls == []  # refused before touching Docker
+
+
 # ---------------- budget, cancellation, shutdown ----------------
 @needs_gpu
 def test_runtime_budget_stops_new_configs_but_keeps_finished_ones(mx, monkeypatch):

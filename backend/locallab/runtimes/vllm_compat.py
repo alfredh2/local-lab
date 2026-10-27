@@ -96,7 +96,7 @@ def validate_runtime(cfg: ManagedVllmConfig, ck: dict[str, Any], capability: tup
     if cfg.dtype == "float32":
         warnings.append("float32 doubles weight memory and is rarely what you want for serving.")
     if cfg.kv_cache_dtype == "fp8":
-        warnings.append("fp8 KV cache can change output quality; LocalLab measures speed, not quality.")
+        warnings.append("fp8 KV cache can change output quality; compare this configuration's quality results (optimization matrix) before relying on it.")
     mpe = ck["max_position_embeddings"]
     if mpe and cfg.max_model_len > mpe:
         errors.append(f"max_model_len {cfg.max_model_len} exceeds the model's max_position_embeddings {mpe}.")

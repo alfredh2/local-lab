@@ -44,6 +44,7 @@ export default function ExperimentDetailPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["experiment", id] }),
   });
 
+  if (exp.data?.type === "optimization_matrix" && typeof window !== "undefined") { window.location.replace(`/optimization/${exp.data.id}`); return <div className="text-sm text-zinc-500">Opening in the Optimization Lab…</div>; }
   if (exp.isError) return <ErrorBox error={exp.error} />;
   if (!exp.data || !job) return <div className="h-24 animate-pulse rounded-xl bg-zinc-900" />;
   const e = exp.data;

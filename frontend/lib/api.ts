@@ -87,3 +87,21 @@ export type ManagedServerRec = {
   launched_at: string; ready_at: string | null; startup_s: number | null; stopped_at: string | null;
   stop_reason: string | null; exit_code: number | null; oom_killed: boolean | null; log_tail: string | null;
 };
+
+export type ConfigResultRec = {
+  id: number; experiment_id: number; job_id: number | null; key: string; label: string; config: Record<string, any>;
+  status: "pending" | "running" | "completed" | "failed" | "skipped" | "cancelled"; failure_kind: string | null; error: string | null;
+  attempts: number; managed_server_id: number | null; results: Record<string, any> | null; started_at: string | null; finished_at: string | null;
+};
+export type MetricInfo = { id: string; label: string; unit: string; direction: "max" | "min"; kind: string; percent: boolean };
+export type ParetoPoint = { id: string; label: string; status: string; contended: boolean; config: Record<string, any>;
+  values: Record<string, { value: number; display: number; lo: number | null; hi: number | null; n: number | null }> };
+export type ParetoResponse = {
+  cell: { io_index: number; concurrency: number | null; common_levels: number[]; default_concurrency: number | null; io_pairs: { input_tokens: number; output_tokens: number }[] };
+  metrics: MetricInfo[]; points: ParetoPoint[]; not_analysed: { id: string; label: string; status: string; reason: string }[]; notes: string[];
+  analysis: null | {
+    objectives: { metric: string; direction: string }[]; constraints: any[]; feasible: string[]; front: string[]; warnings: string[];
+    excluded: { id: string; reason: string; detail: string }[]; dominated: { id: string; dominated_by: { by: string; support: string }[] }[];
+    weighted?: { weights: Record<string, number>; formula: string; caveat: string; ranking: { id: string; score: number; normalized: Record<string, number> }[] };
+  };
+};

@@ -9,6 +9,7 @@ const NAV = [
   { href: "/gpu", label: "GPU" },
   { href: "/models", label: "Models" },
   { href: "/experiments", label: "Experiments" },
+  { href: "/optimization", label: "Optimization Lab" },
   { href: "/compare", label: "Compare" },
 ];
 

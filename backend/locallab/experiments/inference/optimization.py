@@ -31,6 +31,7 @@ from locallab.experiments.inference.sweep_stats import analyze as analyze_levels
 from locallab.models import ConfigResult, Job, ManagedServer, ModelRecord, utcnow
 from locallab.runtimes import vllm_managed as vm
 from locallab.services.gpu import GpuSampler
+from locallab.services.gpu_preflight import check_gpu
 
 log = logging.getLogger(__name__)
 SCHEMA_VERSION = 1
@@ -65,8 +66,10 @@ def plan_all(cfg: MatrixConfig, settings: Settings, docker: Any, allow_run_oneof
     return plans
 
 
-def _scrub(results: dict[str, Any] | None) -> dict[str, Any] | None:
-    return results
+def _describe(c: dict[str, Any]) -> str:
+    """One configuration's outcome for the job-level error (the error text usually starts with its own failure kind)."""
+    err, kind = c["error"][:160], str(c["failure_kind"])
+    return f"{c['label']}: {err if err.startswith(kind) else f'{kind}: {err}'}"
 
 
 class OptimizationMatrix(Experiment):
@@ -264,6 +267,14 @@ class OptimizationMatrix(Experiment):
         adapter = None
         matrix_ctx = {"matrix": {"config_index": pos, "configs_total": total, "label": mp.sc.label}}
         try:
+            # The GPU can change between configurations (another job starts); re-check right before every launch.
+            pre = await asyncio.to_thread(check_gpu, cfg.gpu_index, cfg.gpu_memory_utilization, cfg.allow_contention)
+            mp.plan.gpu = pre  # results record the state the launch actually saw
+            if pre.errors:
+                kind = "insufficient_free_memory" if any("cannot be overridden" in e for e in pre.errors) else "gpu_contended"
+                raise vm.ManagedServerError(kind, "; ".join(pre.errors))
+            for w in pre.warnings:
+                ctx.log("WARNING", f"{mp.sc.label}: {w}")
             ctx.set_progress({"phase": "launching_server", **matrix_ctx})
             await asyncio.to_thread(server.launch)
             t_wait = time.monotonic()
@@ -379,6 +390,6 @@ class OptimizationMatrix(Experiment):
         for c in configs:
             counts[c["status"]] = counts.get(c["status"], 0) + 1
         if not counts.get("completed"):
-            raise ExpectedFailure("No configuration completed. " + " | ".join(f"{c['label']}: {c['failure_kind']}: {c['error'][:160]}" for c in configs))
+            raise ExpectedFailure("No configuration completed. " + " | ".join(_describe(c) for c in configs))
         return {"kind": "optimization_matrix", "schema_version": SCHEMA_VERSION, "split": cfg.eval_split, "counts": counts, "configs": configs,
                 "elapsed_s": round(_now() - t_start, 1), "stopped_reason": stopped_reason}
