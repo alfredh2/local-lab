@@ -151,6 +151,7 @@ def test_failure_classification():
     assert classify_launch_failure("ValueError: No available memory for the cache blocks")[0] == "insufficient_kv_cache"
     assert classify_launch_failure("torch.OutOfMemoryError: CUDA out of memory")[0] == "oom"
     assert classify_launch_failure("Model architectures ['X'] are not supported")[0] == "unsupported_model"
+    assert classify_launch_failure("AssertionError: Error in memory profiling. Initial free memory 11.1 GiB, current free memory 28.07 GiB")[0] == "gpu_memory_changed_during_startup"
     assert classify_launch_failure("boom", oom_killed=True)[0] == "host_oom"
     assert classify_launch_failure("???")[0] == "launch_failed"
 

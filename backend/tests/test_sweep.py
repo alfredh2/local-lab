@@ -206,6 +206,8 @@ def test_full_managed_sweep_lifecycle(env):
     assert l4["latency"]["e2e_ms"]["n"] == 24 and l4["latency"]["e2e_ms"]["p95"] is not None and l4["latency"]["e2e_ms"]["p99"] is None
     assert r["levels"][0]["latency"]["e2e_ms"]["p95"] is not None  # 8 req x 3 iterations = 24 >= 20
     assert r["analysis"]["scaling_baseline_concurrency"] == 1
+    g = l4["gpu"]  # device-wide NVML memory must be present per level (regression: int vs str device keys)
+    assert g["peak_memory_mb"] > 0 and g["baseline_memory_mb"] > 0 and g["peak_utilization_pct"] is not None
     # metadata: ownership, image, revision, command, timing
     ms = r["managed_server"]
     assert ms["image_digest"].startswith("vllm/vllm-openai@sha256:") and ms["command"][:3] == ["Qwen/Mini-Instruct", "--revision", "abc123"]

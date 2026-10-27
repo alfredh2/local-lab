@@ -40,6 +40,7 @@ def test_managed_server_listing_hides_logs_in_list_only(client):
     assert lst[0]["log_tail"] is None and lst[0]["container_name"] == "locallab-managed-1-aaa"
     assert client.get(f"/api/managed-servers/{lst[0]['id']}").json()["log_tail"] == "line1\nline2"
     assert client.get("/api/managed-servers/999").status_code == 404
+    assert client.get("/api/managed-servers", params={"job_id": 12345}).json() == []
 
 
 def test_gpu_preflight_endpoint_shape(client):

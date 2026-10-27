@@ -72,3 +72,18 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
+
+export type GpuPreflight = {
+  gpu_index: number; name: string | null; total_mb: number; free_mb: number; requested_mb: number;
+  compute_capability: [number, number] | null; utilization_pct: number | null;
+  other_processes: { pid: number; name: string; memory_mb: number }[];
+  contended: boolean; override: boolean; errors: string[]; warnings: string[];
+};
+export type RuntimeConfigRec = { id: number; name: string; runtime: string; registry_model_id: number | null; config: Record<string, any>; created_at: string };
+export type ManagedServerRec = {
+  id: number; job_id: number | null; container_id: string | null; container_name: string; status: string;
+  image_ref: string; image_id: string | null; image_digest: string | null; host_port: number | null;
+  config: Record<string, any>; command: string[] | null; model: Record<string, any> | null;
+  launched_at: string; ready_at: string | null; startup_s: number | null; stopped_at: string | null;
+  stop_reason: string | null; exit_code: number | null; oom_killed: boolean | null; log_tail: string | null;
+};

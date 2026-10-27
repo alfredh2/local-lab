@@ -141,6 +141,7 @@ def supported_architectures(docker: DockerAPI, image: str, image_id: str, settin
 
 FAILURE_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     ("cuda_driver_mismatch", re.compile(r"Error 803|unsupported display driver"), "CUDA driver/library mismatch inside the container (see scripts/run_vllm_server.sh)."),
+    ("gpu_memory_changed_during_startup", re.compile(r"Error in memory profiling"), "Another process changed its GPU memory use while vLLM was profiling at startup; the GPU is shared and unstable. Retry when it is idle."),
     ("insufficient_free_memory", re.compile(r"Free memory on device.*less than desired|less than desired GPU memory utilization", re.S), "Not enough free GPU memory for the requested gpu_memory_utilization."),
     ("insufficient_kv_cache", re.compile(r"No available memory for the cache blocks|larger than the maximum number of tokens that can be stored in KV cache|KV cache is needed", re.I), "Not enough memory left for the KV cache at this max_model_len; raise gpu_memory_utilization or lower max_model_len."),
     ("oom", re.compile(r"out of memory|OutOfMemoryError|\bOOM\b", re.I), "GPU out of memory while loading or warming up."),

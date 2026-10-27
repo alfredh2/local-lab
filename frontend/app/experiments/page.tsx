@@ -6,12 +6,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Experiment, type ExperimentDetail, type ExperimentType } from "@/lib/api";
 import { fmtDuration, fmtTime } from "@/lib/format";
 import BenchmarkForm from "@/components/BenchmarkForm";
+import SweepForm from "@/components/SweepForm";
 import { btn, btnGhost, Card, Empty, ErrorBox, StatusBadge } from "@/components/ui";
 
 function NewExperiment({ types }: { types: ExperimentType[] }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const [type, setType] = useState((types.find((x) => x.type === "inference_benchmark") ?? types[0])?.type);
+  const [type, setType] = useState((types.find((x) => x.type === "concurrency_sweep") ?? types[0])?.type);
   const [values, setValues] = useState<Record<string, any>>({});
   const t = types.find((x) => x.type === type);
   const props: Record<string, any> = t?.config_schema.properties ?? {};
@@ -34,7 +35,7 @@ function NewExperiment({ types }: { types: ExperimentType[] }) {
         {types.map((x) => <option key={x.type} value={x.type}>{x.title}</option>)}
       </select>
       <p className="mb-3 text-xs text-zinc-500">{t.description}</p>
-      {type === "inference_benchmark" ? <BenchmarkForm key={type} type={t} /> : (
+      {type === "concurrency_sweep" ? <SweepForm key={type} /> : type === "inference_benchmark" ? <BenchmarkForm key={type} type={t} /> : (
       <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
         {Object.entries(props).map(([k, spec]) => (
           <label key={k} className="block text-sm">
@@ -84,12 +85,14 @@ export default function ExperimentsPage() {
                 <tbody className="divide-y divide-zinc-800">
                   {exps.data?.map((e) => (
                     <tr key={e.id} className="hover:bg-zinc-900">
-                      <td className="pl-4">{e.type === "inference_benchmark" && e.latest_job?.status === "completed" &&
+                      <td className="pl-4">{(e.type === "inference_benchmark" || e.type === "concurrency_sweep") && e.latest_job?.status === "completed" &&
                         <input type="checkbox" aria-label={`Select ${e.name}`} checked={picked.includes(e.id)} onChange={() => toggle(e.id)} />}</td>
                       <td className="min-w-[200px] px-4 py-2"><Link href={`/experiments/${e.id}`} className="font-medium hover:underline">{e.name}</Link>
                         <div className="text-xs text-zinc-500">{e.type.replace("_", " ")}</div></td>
                       <td className="px-4 py-2">{e.latest_job && <StatusBadge status={e.latest_job.status} />}</td>
-                      <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-400">{e.type === "inference_benchmark" && e.latest_job?.results ?
+                      <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-400">{e.type === "concurrency_sweep" && e.latest_job?.results ?
+                        `peak ${Math.max(...e.latest_job.results.levels.filter((l: any) => l.status === "ok").map((l: any) => l.stats.aggregate_output_tok_s.mean)).toFixed(0)} tok/s · c=${e.latest_job.results.analysis.peak_throughput_concurrency}${e.latest_job.results.gpu.contended ? " · contended" : ""}`
+                        : e.type === "inference_benchmark" && e.latest_job?.results ?
                         `${Number(e.latest_job.results.summary.throughput.aggregate_output_tok_s).toFixed(0)} tok/s · ${String(e.config.model)}` : ""}</td>
                       <td className="whitespace-nowrap px-4 py-2 tabular-nums">{fmtDuration(e.latest_job?.started_at, e.latest_job?.finished_at)}</td>
                       <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-500">{fmtTime(e.created_at)}</td>

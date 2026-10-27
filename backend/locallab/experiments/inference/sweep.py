@@ -301,7 +301,8 @@ class ConcurrencySweep(Experiment):
 
     @staticmethod
     def _level(c: int, lcfg: InferenceBenchmarkConfig, res: dict[str, Any], sampler: GpuSampler, marks: dict[str, float]) -> dict[str, Any]:
-        s, gpu0 = res["summary"], res["gpu"]["per_device"].get("0", {})
+        per_device = res["gpu"]["per_device"]  # keys are ints in memory (they become strings only after a JSON round trip)
+        s, gpu0 = res["summary"], per_device.get(0) or per_device.get("0") or {}
         window = [x for x in sampler.samples if marks["measured_start"] <= x["t"] <= marks["measured_end"]]
         srv = [x["server_memory_mb"] for x in window if x.get("server_memory_mb") is not None]
         dists = {k: gate_dist(v) for k, v in s["latency"].items()}

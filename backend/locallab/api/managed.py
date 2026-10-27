@@ -46,9 +46,11 @@ def delete_runtime_config(config_id: int, session: Session = Depends(get_session
 
 
 @router.get("/managed-servers", response_model=list[ManagedServerOut])
-def list_managed_servers(limit: int = 50, session: Session = Depends(get_session)):
-    rows = session.scalars(select(ManagedServer).order_by(ManagedServer.id.desc()).limit(min(limit, 200))).all()
-    return [ManagedServerOut.model_validate(r).model_copy(update={"log_tail": None}) for r in rows]  # list omits logs
+def list_managed_servers(limit: int = 50, job_id: int | None = None, session: Session = Depends(get_session)):
+    q = select(ManagedServer).order_by(ManagedServer.id.desc()).limit(min(limit, 200))
+    if job_id is not None:
+        q = q.where(ManagedServer.job_id == job_id)
+    return [ManagedServerOut.model_validate(r).model_copy(update={"log_tail": None}) for r in session.scalars(q).all()]  # list omits logs
 
 
 @router.get("/managed-servers/{server_id}", response_model=ManagedServerOut)

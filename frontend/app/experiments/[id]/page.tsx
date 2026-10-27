@@ -6,6 +6,7 @@ import { api, API_URL, type Artifact, type ExperimentDetail, type JobLog } from 
 import { fmtDuration, fmtNum, fmtTime } from "@/lib/format";
 import LineChartCard from "@/components/GpuChart";
 import BenchmarkResults, { BenchmarkProgress, useJson } from "@/components/BenchmarkResults";
+import SweepResults, { ServerCard, SweepProgress, useManagedServer } from "@/components/SweepResults";
 import { btnGhost, Card, Empty, ErrorBox, Stat, StatusBadge } from "@/components/ui";
 
 type Summ = { min: number; mean: number; max: number } | null;
@@ -34,8 +35,10 @@ export default function ExperimentDetailPage() {
     queryFn: async () => (await fetch(`${API_URL}/api/artifacts/${telemetryId}/content`)).json(),
   });
   const isBench = exp.data?.type === "inference_benchmark";
+  const isSweep = exp.data?.type === "concurrency_sweep";
+  const sweepSrv = useManagedServer(job?.id, isSweep && !!job && job.status !== "completed" && !active);
   const partialArt = arts.data?.find((a) => a.name === "requests.json");
-  const partial = useJson(isBench && job?.status !== "completed" ? partialArt : undefined);
+  const partial = useJson((isBench || isSweep) && job?.status !== "completed" ? partialArt : undefined);
   const cancel = useMutation({
     mutationFn: () => api(`/jobs/${job!.id}/cancel`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["experiment", id] }),
@@ -75,6 +78,19 @@ export default function ExperimentDetailPage() {
         <Card><Stat label="Run time" value={fmtDuration(job.started_at, job.finished_at)} /></Card>
       </div>
 
+      {isSweep && active && <SweepProgress job={job} />}
+      {isSweep && job.status === "completed" && r?.kind === "concurrency_sweep" && <SweepResults job={job} artifacts={arts.data ?? []} />}
+      {isSweep && (job.status === "failed" || job.status === "cancelled") && (
+        <>
+          {sweepSrv.data && <ServerCard ms={sweepSrv.data} defaultOpen={job.status === "failed"} />}
+          {partial.data && (
+            <Card title="Partial data (run did not complete)">
+              <p className="mb-2 text-sm text-amber-300">No aggregate results were produced. Per-request records captured before the run stopped:
+                {" "}{partial.data.levels.map((l: any) => `c=${l.concurrency}: ${l.requests.filter((x: any) => x.ok).length}/${l.requests.length} ok`).join(" · ")}. They are not a valid sweep result.</p>
+            </Card>
+          )}
+        </>
+      )}
       {isBench && active && <BenchmarkProgress job={job} />}
       {isBench && job.status === "completed" && r?.kind === "inference_benchmark" && <BenchmarkResults job={job} artifacts={arts.data ?? []} />}
       {isBench && (job.status === "failed" || job.status === "cancelled") && partial.data && (
@@ -88,7 +104,7 @@ export default function ExperimentDetailPage() {
                 <td>{fmtNum(x.ttft_ms, 1)}</td><td>{fmtNum(x.e2e_ms, 1)}</td><td className="max-w-xs truncate" title={x.error_message}>{x.error_message ?? ""}</td></tr>))}</tbody></table></div>
         </Card>
       )}
-      {!isBench && job.status === "completed" && r?.kind === "diagnostic" ? (
+      {!isBench && !isSweep && job.status === "completed" && r?.kind === "diagnostic" ? (
         <>
           <Card title="Recorded results (min / mean / max)">
             <div className="grid gap-4 md:grid-cols-3">
@@ -116,7 +132,7 @@ export default function ExperimentDetailPage() {
             </div>
           )}
         </>
-      ) : isBench ? null : !job.finished_at ? (
+      ) : isBench || isSweep ? null : !job.finished_at ? (
         <Empty title={job.status === "queued" ? "Waiting for the worker" : "Running…"}>
           {job.status === "queued" ? "Results appear here once a worker picks up this job. Start one with `make worker`." : "Results are recorded when the run completes."}
         </Empty>
