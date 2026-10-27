@@ -66,16 +66,21 @@ class VllmOpenAIAdapter(RuntimeAdapter):
 
     @staticmethod
     def _payload(req: GenerationRequest) -> dict:
-        body = {
-            "model": req.model, "prompt": req.prompt, "max_tokens": req.max_tokens,
+        body: dict = {
+            "model": req.model, "max_tokens": req.max_tokens,
             "temperature": req.temperature, "top_p": req.top_p, "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if req.messages is not None:
+            body["messages"] = req.messages
+            body["chat_template_kwargs"] = req.chat_template_kwargs or {}
+        else:
+            body["prompt"] = req.prompt
         if req.seed is not None:
             body["seed"] = req.seed
         if req.top_k is not None:
             body["top_k"] = req.top_k
-        if req.force_length:
+        if req.force_length and req.messages is None:
             body["min_tokens"] = req.max_tokens
             body["ignore_eos"] = True
         return body
@@ -104,7 +109,9 @@ class VllmOpenAIAdapter(RuntimeAdapter):
         return out
 
     async def _stream(self, req: GenerationRequest, out: RequestOutcome) -> None:
-        async with self._client.stream("POST", "/v1/completions", json=self._payload(req)) as resp:
+        chat = req.messages is not None
+        path = "/v1/chat/completions" if chat else "/v1/completions"
+        async with self._client.stream("POST", path, json=self._payload(req)) as resp:
             out.http_status = resp.status_code
             if resp.status_code != 200:
                 body = (await resp.aread()).decode(errors="replace")
@@ -133,10 +140,14 @@ class VllmOpenAIAdapter(RuntimeAdapter):
                     usage = obj["usage"]
                 for ch in obj.get("choices", []):
                     now = time.perf_counter()
-                    chunks += 1
-                    if out.t_first_token is None:
-                        out.t_first_token = now
-                    out.chunk_times.append(now)
+                    piece = ch.get("text") if not chat else (ch.get("delta") or {}).get("content")
+                    if piece:
+                        out.text += piece
+                    if not chat or piece:  # a chat stream opens with a role-only delta that is not a generated token
+                        chunks += 1
+                        if out.t_first_token is None:
+                            out.t_first_token = now
+                        out.chunk_times.append(now)
                     if ch.get("finish_reason"):
                         out.finish_reason = ch["finish_reason"]
             if out.finish_reason is None:
@@ -148,6 +159,14 @@ class VllmOpenAIAdapter(RuntimeAdapter):
             else:
                 out.completion_tokens, out.token_source = chunks, "estimated"
             out.ok = True
+
+    async def count_tokens(self, model: str, text: str) -> int | None:
+        """Token count by the server's own tokenizer (None if the server has no /tokenize)."""
+        try:
+            r = await self._client.post("/tokenize", json={"model": model, "prompt": text}, timeout=60.0)
+            return int(r.json()["count"]) if r.status_code == 200 else None
+        except (httpx.HTTPError, KeyError, ValueError):
+            return None
 
     async def aclose(self) -> None:
         await self._client.aclose()

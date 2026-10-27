@@ -5,6 +5,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -30,6 +31,11 @@ class MockState:
     disconnects: int = 0
     completed: int = 0
     bodies: list = field(default_factory=list)
+    responder: Callable[[list, dict], str] = lambda messages, body: "ok"  # chat answers
+    chat_requests: int = 0
+    tokenize: bool = True
+    chars_per_token: float = 4.0
+    chat_token_s: float = 0.002
 
 
 def build_app(st: MockState) -> FastAPI:
@@ -85,6 +91,57 @@ def build_app(st: MockState) -> FastAPI:
                     u = {"prompt_tokens": n_prompt + st.prompt_token_offset, "completion_tokens": n_out,
                          "total_tokens": n_prompt + n_out}
                     yield f"data: {json.dumps({'choices': [], 'usage': u})}\n\n"
+                yield "data: [DONE]\n\n"
+                st.completed += 1
+            except asyncio.CancelledError:
+                st.disconnects += 1
+                raise
+            finally:
+                st.in_flight -= 1
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @app.post("/tokenize")
+    async def tokenize(request: Request):
+        body = await request.json()
+        if not st.tokenize:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        n = int(len(body.get("prompt", "")) / st.chars_per_token + 0.999)
+        return {"count": n, "max_model_len": st.max_model_len, "tokens": list(range(min(n, 8)))}
+
+    @app.post("/v1/chat/completions")
+    async def chat(request: Request):
+        body = await request.json()
+        st.requests += 1
+        st.chat_requests += 1
+        st.bodies.append(body)
+        if st.mode == "http500":
+            return JSONResponse({"error": {"message": "internal boom", "code": 500}}, status_code=500)
+        if st.mode == "oom":
+            return JSONResponse({"error": {"message": "CUDA out of memory", "code": 500}}, status_code=500)
+        text = st.responder(body["messages"], body)
+        n_prompt = sum(max(1, int(len(m["content"]) / st.chars_per_token)) for m in body["messages"])
+        pieces = [text[i:i + 4] for i in range(0, len(text), 4)] or [""]
+        max_tokens = body.get("max_tokens", 256)
+        truncated = len(pieces) > max_tokens
+        pieces = pieces[:max_tokens]
+
+        async def gen():
+            st.in_flight += 1
+            st.max_in_flight = max(st.max_in_flight, st.in_flight)
+            try:
+                if st.mode == "hang":
+                    await asyncio.sleep(60)
+                await asyncio.sleep(st.ttft_s)
+                yield f"data: {json.dumps({'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n"
+                for i, piece in enumerate(pieces):
+                    if await request.is_disconnected():
+                        st.disconnects += 1
+                        return
+                    yield f"data: {json.dumps({'choices': [{'index': 0, 'delta': {'content': piece}, 'finish_reason': None}]})}\n\n"
+                    await asyncio.sleep(st.chat_token_s)
+                yield f"data: {json.dumps({'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'length' if truncated else 'stop'}]})}\n\n"
+                yield f"data: {json.dumps({'choices': [], 'usage': {'prompt_tokens': n_prompt, 'completion_tokens': len(pieces), 'total_tokens': n_prompt + len(pieces)}})}\n\n"
                 yield "data: [DONE]\n\n"
                 st.completed += 1
             except asyncio.CancelledError:

@@ -33,7 +33,7 @@ class ServerInfo:
 @dataclass
 class GenerationRequest:
     model: str
-    prompt: str | list[int]
+    prompt: str | list[int]  # ignored when `messages` is set
     max_tokens: int
     temperature: float = 0.0
     top_p: float = 1.0
@@ -41,6 +41,8 @@ class GenerationRequest:
     seed: int | None = None
     force_length: bool = True  # generate exactly max_tokens (ignore EOS)
     timeout_s: float = 300.0
+    messages: list[dict[str, str]] | None = None  # chat request: the server applies the model's chat template
+    chat_template_kwargs: dict[str, Any] | None = None
 
 
 @dataclass
@@ -59,6 +61,7 @@ class RequestOutcome:
     error_type: str | None = None  # timeout|connection|connection_lost|oom|bad_request|server_error|incomplete_stream|cancelled
     error_message: str | None = None
     http_status: int | None = None
+    text: str = ""  # generated text (evaluation scoring)
 
 
 class RuntimeAdapter(ABC):
