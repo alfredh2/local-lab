@@ -76,6 +76,7 @@ class InferenceBenchmark(Experiment):
         sampler = GpuSampler()
         marks: dict[str, float] = {}
         monitor_exc: list[BaseException] = []
+        succeeded = False
         try:
             ctx.log("INFO", f"Preflight against {cfg.server_url} model={cfg.model}")
             pf = await run_preflight(cfg, adapter)
@@ -98,11 +99,13 @@ class InferenceBenchmark(Experiment):
             if monitor_exc:
                 raise monitor_exc[0]  # Cancelled or WorkerShutdown, raised after data is preserved below
             gpus_after = read_gpus()
-            return self._finalize(cfg, pf, records, marks, sampler, baseline, gpus_before, gpus_after)
+            result = self._finalize(cfg, pf, records, marks, sampler, baseline, gpus_before, gpus_after)
+            succeeded = True
+            return result
         finally:
             sampler.stop()
             await adapter.aclose()
-            self._write_artifacts(ctx, cfg, records, sampler, marks, complete=not monitor_exc and not progress.aborted)
+            self._write_artifacts(ctx, cfg, records, sampler, marks, complete=succeeded)
 
     async def _monitor(self, ctx: ExperimentContext, progress: Progress, body: asyncio.Task, exc: list[BaseException]) -> None:
         while not body.done():
