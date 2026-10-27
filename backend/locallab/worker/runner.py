@@ -58,7 +58,7 @@ class Worker:
                     return
                 config = exp_type.config_model.model_validate(config_raw)
                 job_service.transition(s, job, JobStatus.running)
-            ctx = JobContext(job_id, seed, self.settings, self.shutdown)
+            ctx = JobContext(job_id, seed, self.settings, self.shutdown, self.worker_id)
             results = exp_type.run(config, ctx)
         except Cancelled:
             self._finish(job_id, JobStatus.cancelled)

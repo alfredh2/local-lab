@@ -180,3 +180,22 @@ def test_history_survives_api_restart(settings):
         got = c2.get(f"/api/experiments/{exp['id']}").json()
         assert got["name"] == "persist me" and got["jobs"][0]["status"] == "queued"
         assert [e["id"] for e in c2.get("/api/experiments").json()] == [exp["id"]]
+
+
+def test_worker_heartbeat_continues_during_long_job(client, worker, settings):
+    from locallab.services.worker_heartbeat import read_heartbeat
+
+    exp = submit(client, "slow")
+    jid = exp["jobs"][0]["id"]
+    t = threading.Thread(target=worker.tick)
+    t.start()
+    for _ in range(100):
+        if client.get(f"/api/jobs/{jid}").json()["status"] == "running":
+            break
+        time.sleep(0.05)
+    first = read_heartbeat(settings).timestamp
+    time.sleep(2.6)
+    assert read_heartbeat(settings).timestamp > first  # still alive mid-job, not only between jobs
+    assert client.get("/api/system/status").json()["worker"]["alive"] is True
+    client.post(f"/api/jobs/{jid}/cancel")
+    t.join(timeout=10)

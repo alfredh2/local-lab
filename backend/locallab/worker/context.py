@@ -9,6 +9,7 @@ from locallab.db import session_scope
 from locallab.experiments.base import Cancelled
 from locallab.models import Artifact, Job, utcnow
 from locallab.services import jobs as job_service
+from locallab.services.worker_heartbeat import write_heartbeat
 
 
 class WorkerShutdown(Exception):
@@ -18,11 +19,12 @@ class WorkerShutdown(Exception):
 class JobContext:
     HEARTBEAT_EVERY_S = 2.0
 
-    def __init__(self, job_id: int, seed: int | None, settings: Settings, shutdown) -> None:
+    def __init__(self, job_id: int, seed: int | None, settings: Settings, shutdown, worker_id: str | None = None) -> None:
         self.job_id = job_id
         self.seed = seed
         self._settings = settings
         self._shutdown = shutdown  # threading.Event
+        self._worker_id = worker_id
         self._last_hb = 0.0
         self._last_progress = 0.0
 
@@ -37,6 +39,8 @@ class JobContext:
         if now - self._last_hb < self.HEARTBEAT_EVERY_S and self._last_hb:
             return False
         self._last_hb = now
+        if self._worker_id:
+            write_heartbeat(self._settings, self._worker_id)  # stay 'alive' while a long job runs
         with session_scope() as s:
             job = s.get(Job, self.job_id)
             assert job is not None

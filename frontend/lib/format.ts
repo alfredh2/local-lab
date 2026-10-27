@@ -16,3 +16,5 @@ export function fmtDuration(a?: string | null, b?: string | null) {
   const s = Math.max(0, ms / 1000);
   return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
+export const fmtMs = (v: number | null | undefined) => (v == null ? "—" : v >= 1000 ? `${(v / 1000).toFixed(2)} s` : `${v.toFixed(1)} ms`);
+export const fmtInt = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString());

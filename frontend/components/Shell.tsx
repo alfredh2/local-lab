@@ -9,6 +9,7 @@ const NAV = [
   { href: "/gpu", label: "GPU" },
   { href: "/models", label: "Models" },
   { href: "/experiments", label: "Experiments" },
+  { href: "/compare", label: "Compare" },
 ];
 
 export default function Shell({ children }: { children: React.ReactNode }) {

@@ -33,6 +33,7 @@ export type Job = {
   id: number; experiment_id: number; status: JobStatus; cancel_requested: boolean;
   worker_id: string | null; error: string | null; seed: number | null;
   results: Record<string, any> | null;
+  progress: Record<string, any> | null;
   queued_at: string; started_at: string | null; finished_at: string | null;
 };
 export type Experiment = {
@@ -42,7 +43,14 @@ export type Experiment = {
 export type ExperimentDetail = Experiment & { environment: Record<string, any>; jobs: Job[] };
 export type JobLog = { id: number; ts: string; level: string; message: string };
 export type Artifact = { id: number; job_id: number; name: string; kind: string; size_bytes: number; sha256: string };
-export type ExperimentType = { type: string; title: string; description: string; config_schema: any };
+export type ExperimentType = {
+  type: string; title: string; description: string; config_schema: any; presets: Record<string, Record<string, any>>;
+};
+export type ValidationReport = { ok: boolean; errors: string[]; warnings: string[]; info: Record<string, any> | null };
+export type ProbeResult = {
+  runtime: string; base_url: string; version: string | null; kv_cache_tokens: number | null;
+  models: { id: string; root: string | null; max_model_len: number | null }[];
+};
 
 export class ApiError extends Error {}
 

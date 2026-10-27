@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, API_URL, type Artifact, type ExperimentDetail, type JobLog } from "@/lib/api";
 import { fmtDuration, fmtNum, fmtTime } from "@/lib/format";
 import LineChartCard from "@/components/GpuChart";
+import BenchmarkResults, { BenchmarkProgress, useJson } from "@/components/BenchmarkResults";
 import { btnGhost, Card, Empty, ErrorBox, Stat, StatusBadge } from "@/components/ui";
 
 type Summ = { min: number; mean: number; max: number } | null;
@@ -32,6 +33,9 @@ export default function ExperimentDetailPage() {
     queryKey: ["telemetry", telemetryId], enabled: !!telemetryId,
     queryFn: async () => (await fetch(`${API_URL}/api/artifacts/${telemetryId}/content`)).json(),
   });
+  const isBench = exp.data?.type === "inference_benchmark";
+  const partialArt = arts.data?.find((a) => a.name === "requests.json");
+  const partial = useJson(isBench && job?.status !== "completed" ? partialArt : undefined);
   const cancel = useMutation({
     mutationFn: () => api(`/jobs/${job!.id}/cancel`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["experiment", id] }),
@@ -71,7 +75,20 @@ export default function ExperimentDetailPage() {
         <Card><Stat label="Run time" value={fmtDuration(job.started_at, job.finished_at)} /></Card>
       </div>
 
-      {job.status === "completed" && r?.kind === "diagnostic" ? (
+      {isBench && active && <BenchmarkProgress job={job} />}
+      {isBench && job.status === "completed" && r?.kind === "inference_benchmark" && <BenchmarkResults job={job} artifacts={arts.data ?? []} />}
+      {isBench && (job.status === "failed" || job.status === "cancelled") && partial.data && (
+        <Card title="Partial data (run did not complete)">
+          <p className="mb-2 text-sm text-amber-300">No aggregate results were produced. These per-request records were captured before the run stopped
+            {" "}({partial.data.requests.length} requests, {partial.data.requests.filter((x: any) => x.ok).length} ok). They are not a valid benchmark result.</p>
+          <div className="max-h-64 overflow-auto"><table className="w-full text-xs tabular-nums"><thead className="text-left text-zinc-500"><tr>
+            {["phase", "#", "status", "TTFT ms", "E2E ms", "error"].map((h) => <th key={h} className="py-1 pr-2 font-medium">{h}</th>)}</tr></thead>
+            <tbody>{partial.data.requests.slice(0, 100).map((x: any, i: number) => (
+              <tr key={i} className={x.ok ? "" : "text-red-300"}><td>{x.phase}</td><td>{x.index + 1}</td><td>{x.ok ? "ok" : x.error_type}</td>
+                <td>{fmtNum(x.ttft_ms, 1)}</td><td>{fmtNum(x.e2e_ms, 1)}</td><td className="max-w-xs truncate" title={x.error_message}>{x.error_message ?? ""}</td></tr>))}</tbody></table></div>
+        </Card>
+      )}
+      {!isBench && job.status === "completed" && r?.kind === "diagnostic" ? (
         <>
           <Card title="Recorded results (min / mean / max)">
             <div className="grid gap-4 md:grid-cols-3">
@@ -99,7 +116,7 @@ export default function ExperimentDetailPage() {
             </div>
           )}
         </>
-      ) : !job.finished_at ? (
+      ) : isBench ? null : !job.finished_at ? (
         <Empty title={job.status === "queued" ? "Waiting for the worker" : "Running…"}>
           {job.status === "queued" ? "Results appear here once a worker picks up this job. Start one with `make worker`." : "Results are recorded when the run completes."}
         </Empty>
