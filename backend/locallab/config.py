@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     docker_bin: str = "docker"
     vllm_image: str = "vllm/vllm-openai:latest"
     managed_startup_timeout_s: float = 600.0
+    reconcile_interval_s: float = 10.0
     worker_poll_s: float = 1.0
     worker_stale_s: float = 30.0
 

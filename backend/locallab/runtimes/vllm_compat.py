@@ -30,7 +30,7 @@ class ManagedVllmConfig(BaseModel):
     max_num_seqs: int = Field(64, ge=1, le=1024)
     enforce_eager: bool = False
     gpu_index: int = Field(0, ge=0, le=15)
-    startup_timeout_s: float = Field(600, ge=30, le=3600)
+    startup_timeout_s: float = Field(600, ge=5, le=3600)
     allow_contention: bool = Field(False, description="Launch even if other work is using the GPU (nothing is stopped)")
     image: str | None = Field(None, description="Docker image; defaults to LOCALLAB_VLLM_IMAGE")
 

@@ -36,8 +36,8 @@ def gpu(monkeypatch):
 
 
 @pytest.fixture
-def fd(settings):
-    d = FakeDocker()
+def fd(settings, fake_docker):
+    d = fake_docker
     (settings.data_dir / f"vllm_archs_{d.image.id.split(':')[-1][:16]}.json").write_text(json.dumps(d.arch_list))
     return d
 

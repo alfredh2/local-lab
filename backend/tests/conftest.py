@@ -37,3 +37,14 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Settin
 def session(settings: Settings) -> Iterator[Session]:
     with db.session_scope() as s:
         yield s
+
+
+@pytest.fixture(autouse=True)
+def fake_docker(monkeypatch: pytest.MonkeyPatch):
+    """No test may touch the real Docker daemon: every Docker call goes to this in-memory fake."""
+    import locallab.runtimes.vllm_managed as vm
+    from tests.fake_docker import FakeDocker
+
+    fd = FakeDocker(model="mini-instruct")
+    monkeypatch.setattr(vm, "make_docker", lambda s: fd)
+    return fd

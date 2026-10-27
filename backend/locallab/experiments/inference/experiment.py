@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from locallab.errors import ServerCrashed
 from locallab.experiments.base import Cancelled, Experiment, ExperimentContext, PreflightResult
 from locallab.experiments.inference.config import PRESETS, InferenceBenchmarkConfig
 from locallab.experiments.inference.metrics import DEFINITIONS, Record, summarize, verify_lengths
@@ -107,7 +108,10 @@ class InferenceBenchmark(Experiment):
             await adapter.aclose()
             self._write_artifacts(ctx, cfg, records, sampler, marks, complete=succeeded)
 
-    async def _monitor(self, ctx: ExperimentContext, progress: Progress, body: asyncio.Task, exc: list[BaseException]) -> None:
+    async def _monitor(self, ctx: ExperimentContext, progress: Progress, body: asyncio.Task, exc: list[BaseException],
+                       health=None) -> None:
+        """Cancellation, progress publishing and (optionally) a server-health watchdog for `body`."""
+        last_health = 0.0
         while not body.done():
             try:
                 if ctx.should_cancel():
@@ -118,13 +122,20 @@ class InferenceBenchmark(Experiment):
                 exc.append(e)
                 body.cancel()
                 return
+            if health is not None and time.monotonic() - last_health >= 2.0:
+                last_health = time.monotonic()
+                problem = await asyncio.to_thread(health)
+                if problem:
+                    exc.append(ServerCrashed(problem))
+                    body.cancel()
+                    return
             elapsed = time.perf_counter() - progress.phase_started if progress.phase_started else 0
             ctx.set_progress({
                 "phase": progress.phase, "iteration": progress.iteration, "total": progress.total, "done": progress.done,
                 "ok": progress.ok, "failed": progress.failed, "in_flight": progress.in_flight,
                 "output_tokens": progress.output_tokens, "elapsed_s": round(elapsed, 1),
                 "live_output_tok_s": round(progress.output_tokens / elapsed, 1) if elapsed > 1 else None,
-                "last_error": progress.last_error,
+                "last_error": progress.last_error, **progress.context,
             })
             await asyncio.sleep(0.5)
 
@@ -166,7 +177,10 @@ class InferenceBenchmark(Experiment):
             iterations.append({"iteration": it + 1, "wall_s": s["wall_s"], "success_rate": s["requests"]["success_rate"],
                                "aggregate_output_tok_s": s["throughput"]["aggregate_output_tok_s"],
                                "total_tok_s": s["throughput"]["total_tok_s"],
-                               "e2e_p50_ms": (s["latency"]["e2e_ms"] or {}).get("p50")})
+                               "e2e_p50_ms": (s["latency"]["e2e_ms"] or {}).get("p50"),
+                               "e2e_p95_ms": (s["latency"]["e2e_ms"] or {}).get("p95"),
+                               "ttft_p50_ms": (s["latency"]["ttft_ms"] or {}).get("p50"),
+                               "tpot_p50_ms": (s["latency"]["tpot_ms"] or {}).get("p50")})
         # pooled wall time = sum of per-iteration walls (iterations run back to back)
         wall = sum(i["wall_s"] for i in iterations)
         out_tok, in_tok = pooled["tokens"]["output_total"], pooled["tokens"]["input_total"]

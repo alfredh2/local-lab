@@ -12,12 +12,15 @@ import httpx
 from sqlalchemy import select
 
 from locallab.config import Settings
+from locallab.errors import ExpectedFailure
 from locallab.db import session_scope
 from locallab.models import Job, JobStatus, ManagedServer, ModelRecord, utcnow
 from locallab.runtimes.base import ModelInfo, RuntimeError_, ServerInfo
 from locallab.runtimes.docker import (
-    CUDA_COMPAT_FIX_LD_LIBRARY_PATH, ContainerSpec, DockerAPI, DockerError, NotOwnedError, OwnedDocker, new_container_name,
+    CUDA_COMPAT_FIX_LD_LIBRARY_PATH, ContainerSpec, DockerAPI, DockerCLI, DockerError, NotOwnedError, OwnedDocker,
+    new_container_name,
 )
+from locallab.services.instance import get_instance_id
 from locallab.runtimes.vllm_compat import (
     ManagedVllmConfig, checkpoint_info, classify_launch_failure, supported_architectures, validate_runtime,
 )
@@ -25,11 +28,13 @@ from locallab.runtimes.vllm_openai import VllmOpenAIAdapter
 from locallab.services.gpu_preflight import GpuPreflight, check_gpu
 
 log = logging.getLogger(__name__)
+# Tests replace this to inject a fake Docker.
+make_docker: Callable[[Settings], DockerAPI] = lambda settings: DockerCLI(settings.docker_bin)
 HF_MOUNT = "/root/.cache/huggingface/hub"
 LOG_TAIL_CHARS = 20_000
 
 
-class ManagedServerError(RuntimeError):
+class ManagedServerError(ExpectedFailure):
     """Launch/readiness/liveness failure with a machine-readable kind."""
 
     def __init__(self, kind: str, message: str) -> None:
@@ -62,6 +67,10 @@ class ManagedPlan:
         if c.enforce_eager:
             cmd.append("--enforce-eager")
         return cmd
+
+
+def owned_docker(settings: Settings) -> OwnedDocker:
+    return OwnedDocker(make_docker(settings), get_instance_id(settings))
 
 
 def build_plan(cfg: ManagedVllmConfig, registry_model_id: int | None, settings: Settings, docker: DockerAPI,

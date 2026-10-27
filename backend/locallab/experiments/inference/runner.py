@@ -1,6 +1,6 @@
 """Closed-loop request scheduler: `concurrency` workers pull requests until the plan is exhausted."""
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from locallab.experiments.inference.metrics import Record
 from locallab.runtimes.base import GenerationRequest, RuntimeAdapter
@@ -34,6 +34,7 @@ class Progress:
     consecutive_failures: int = 0
     last_error: str | None = None
     aborted: bool = False
+    context: dict = field(default_factory=dict)  # extra fields merged into published progress (e.g. sweep level)
 
     def start_phase(self, phase: str, iteration: int, total: int, now: float) -> None:
         self.phase, self.iteration, self.total, self.phase_started = phase, iteration, total, now
