@@ -67,6 +67,9 @@ def gpu(monkeypatch):
                                "errors": errors, "warnings": warnings})
 
     monkeypatch.setattr(vm, "check_gpu", fake)
+    import locallab.experiments.inference.optimization as opt_mod
+
+    monkeypatch.setattr(opt_mod, "check_gpu", fake)  # the matrix also re-checks right before every launch
     return state
 
 
